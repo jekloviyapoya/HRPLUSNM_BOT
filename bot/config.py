@@ -35,6 +35,12 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY") or ""
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or ""
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or ""
 
+# --- Litsenziya serveri (BMP-BOTLAR) ---
+# Bo'sh bo'lsa: mahalliy sinov muddati ishlaydi, markaz so'ralmaydi.
+LICENSE_SERVER_URL = (os.getenv("LICENSE_SERVER_URL") or "").strip()
+LICENSE_BOT_USERNAME = (os.getenv("LICENSE_BOT_USERNAME") or "").strip()
+LICENSE_CHECK_MINUTES = _int("LICENSE_CHECK_MINUTES", 15)
+
 # --- Bito ---
 BITO_BASE_URL = (
     os.getenv("BITO_BASE_URL")

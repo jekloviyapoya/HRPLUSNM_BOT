@@ -34,6 +34,9 @@ Tavsiya etiladi:
 | `TZ` | `Asia/Tashkent` |
 | `TRIAL_DAYS` | `14` |
 | `GRACE_DAYS` | `3` |
+| `LICENSE_SERVER_URL` | bo'sh — BMP-BOTLAR manzili |
+| `LICENSE_BOT_USERNAME` | `HRPLUSNM_BOT` |
+| `LICENSE_CHECK_MINUTES` | `15` |
 
 Keyingi bosqichlarda kerak bo'ladi: `ANTHROPIC_API_KEY`, `GROQ_API_KEY`,
 `GEMINI_API_KEY`, `OPENAI_API_KEY`.
@@ -79,12 +82,25 @@ migrations/      001_init.sql, ...
 tests/
 ```
 
+## Litsenziya
+
+`LICENSE_SERVER_URL` bo'sh bo'lsa — mahalliy 14 kunlik sinov ishlaydi.
+
+Manzil berilsa va biznes egasi **Obuna → Kalitni kiritish** orqali BMP-BOTLAR
+kalitini kiritsa, muddat markazdan boshqariladi: `GET /api/check`.
+
+Markaz javob bermasa mijoz **ishlashda davom etadi** — oxirgi ma'lum holat
+bo'yicha. Bu ataylab: markaziy server yagona nosozlik nuqtasi bo'lmasligi
+kerak. Uzoq uzilishda sotuvchiga ogohlantirish boradi, mijoz qulflanmaydi.
+
 ## Holat
 
-**1-bosqich (poydevor) — tayyor.** Baza, migratsiyalar, rollar, obuna
-holatlari, menyu, sotuvchi paneli, webapp, `push.sh`.
+- **1-bosqich** — poydevor: baza, migratsiyalar, rollar, menyu, webapp
+- **2-bosqich** — Bito ulanishi va o'rnatish sehrgari
+- **3-bosqich** — bitta bazada ko'p biznes, taklif kodlari
+- **4-bosqich** — BMP-BOTLAR litsenziya serveriga ulanish
 
-Keyingisi — **2-bosqich:** to'liq o'rnatish sehrgari va Bito ulanishi.
+Keyingisi — modullar: Ombor, Nakladnoy, Moliya, Vazifalar, Marketing.
 
 ## Buyruqlar
 
@@ -92,5 +108,5 @@ Keyingisi — **2-bosqich:** to'liq o'rnatish sehrgari va Bito ulanishi.
 |---|---|
 | `/start`, `/menu`, `/build` | hamma |
 | `/saas` | sotuvchi |
-| `/set_license YYYY-MM-DD [tarif]` | sotuvchi |
+| `/set_license <biznes_id> YYYY-MM-DD [tarif]` | sotuvchi |
 | `/saas_msg <matn>` | sotuvchi |

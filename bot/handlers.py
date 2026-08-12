@@ -271,7 +271,7 @@ def register(bot):
         license.require_active(section)
 
         if section == "obuna":
-            bot.send_message(call.message.chat.id, license.summary())
+            _subscription(call)
             return
         if section == "yordam":
             bot.send_message(
@@ -288,6 +288,59 @@ def register(bot):
             f"«{section}» bo'limi keyingi bosqichda ochiladi.",
             reply_markup=ui.main_menu(call.from_user.id),
         )
+
+    def _subscription(call):
+        rec = license.record()
+        lines = [license.summary()]
+        if rec["license_key"]:
+            lines.append("")
+            lines.append("Manba: markaziy litsenziya")
+            if rec["checked_at"]:
+                lines.append(f"Oxirgi tekshiruv: {rec['checked_at']} UTC")
+            if rec["offline_since"]:
+                lines.append("⚠️ Markaz bilan aloqa yo'q — oxirgi ma'lum "
+                             "holat bo'yicha ishlayapti.")
+        else:
+            lines.append("")
+            lines.append("Litsenziya kaliti kiritilmagan — sinov muddati.")
+
+        buttons = []
+        if users.role_of(call.from_user.id) == "owner":
+            buttons.append(
+                ("🔑 Kalitni kiritish" if not rec["license_key"]
+                 else "🔑 Kalitni almashtirish", "lic:key")
+            )
+            if rec["license_key"]:
+                buttons.append(("🔄 Hozir tekshirish", "lic:sync"))
+        bot.send_message(
+            call.message.chat.id,
+            "\n".join(lines),
+            reply_markup=ui.buttons(buttons, row_width=1, back="menu:root")
+            if buttons else None,
+        )
+
+    @bot.callback_query_handler(func=lambda c: (c.data or "").startswith("lic:"))
+    @safe
+    def _license_click(call):
+        ui.ack(bot, call)
+        users.require_role(call.from_user.id, "owner")
+
+        if call.data == "lic:key":
+            sessions.set(call.from_user.id, "lic:key", {})
+            bot.send_message(
+                call.message.chat.id,
+                "Litsenziya kalitini yuboring.\n"
+                "Kalitni sotuvchi beradi — <code>GB-</code> bilan boshlanadi.",
+                parse_mode="HTML",
+            )
+            return
+
+        if call.data == "lic:sync":
+            state, notice = license.sync()
+            text = f"Tekshirildi.\n\n{license.summary()}"
+            if notice:
+                text += f"\n\nℹ️ {notice['text']}"
+            bot.send_message(call.message.chat.id, text)
 
     def _staff_panel(call):
         users.require_role(call.from_user.id, "manager")
@@ -354,6 +407,10 @@ def register(bot):
             _do_join(message, message.text or "")
             return
 
+        if state == "lic:key":
+            _save_license_key(message)
+            return
+
         if ctx.current() is None:
             bot.send_message(message.chat.id, "Boshlash uchun /start bosing.")
             return
@@ -367,6 +424,39 @@ def register(bot):
             "Menyudan tanlang:",
             reply_markup=ui.main_menu(tg_id),
         )
+
+    def _save_license_key(message):
+        users.require_role(message.from_user.id, "owner")
+        key = (message.text or "").strip()
+        if len(key) < 6:
+            bot.send_message(message.chat.id, "Bu kalitga o'xshamaydi. Qaytadan yuboring.")
+            return
+        previous = license.record()["license_key"]
+        license.set_key(key)
+        try:
+            state, notice = license.sync()
+        except Exception:  # noqa: BLE001
+            license.clear_key()
+            if previous:
+                license.set_key(previous)
+            raise
+
+        if license.record()["remote_status"] == "invalid":
+            license.clear_key()
+            if previous:
+                license.set_key(previous)
+            bot.send_message(
+                message.chat.id,
+                "⚠️ Bunday kalit topilmadi. Sotuvchidan qayta so'rang.",
+            )
+            return
+
+        sessions.clear(message.from_user.id)
+        text = f"✅ Kalit qabul qilindi.\n\n{license.summary()}"
+        if notice:
+            text += f"\n\nℹ️ {notice['text']}"
+        bot.send_message(message.chat.id, text,
+                         reply_markup=ui.main_menu(message.from_user.id))
 
     @bot.message_handler(content_types=["photo", "document", "sticker"])
     @safe

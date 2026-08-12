@@ -4,9 +4,12 @@ Ma'lumot hech qachon o'chirilmaydi. Qulflanganda faqat kirish cheklanadi.
 """
 
 import datetime as dt
+import logging
 
 from . import config, ctx, db
 from .errors import LicenseError, PlanError
+
+log = logging.getLogger(__name__)
 
 PLANS = ("boshlangich", "standart", "toliq")
 _PLAN_RANK = {p: i for i, p in enumerate(PLANS)}
@@ -50,8 +53,14 @@ def days_left():
 
 
 def state():
-    """Bazadagi holatni sanaga qarab qayta hisoblaydi va saqlaydi."""
+    """Holatni qaytaradi.
+
+    Markaziy kalit bo'lsa — oxirgi ma'lum javob (aloqa yo'qligida ham
+    mijoz ishlaydi). Aks holda sana bo'yicha mahalliy hisob.
+    """
     rec = record()
+    if rec["license_key"] and rec["source"] == "bmp":
+        return rec["state"]
     left = (_parse(rec["expires_at"]) - _today()).days
     was = rec["state"]
 
@@ -147,4 +156,111 @@ def due_reminder():
     return (
         f"⚠️ Obuna muddati {abs(left)} kun oldin tugagan. "
         f"{config.GRACE_DAYS - abs(left)} kundan keyin bot qulflanadi."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Markaziy litsenziya (BMP-BOTLAR)
+#
+# license_key bo'lmasa — yuqoridagi mahalliy mantiq ishlaydi.
+# Kalit bo'lsa — haqiqat manbai BMP, mahalliy yozuv esa kesh.
+# ---------------------------------------------------------------------------
+
+import datetime as _dt  # noqa: E402
+
+from . import licsrv  # noqa: E402
+
+
+def key():
+    return record()["license_key"]
+
+
+def set_key(license_key):
+    db.run(
+        "UPDATE license SET license_key = ?, source = 'bmp', "
+        "  checked_at = NULL, offline_since = NULL WHERE tenant_id = ?",
+        ((license_key or "").strip(), ctx.require()),
+    )
+
+
+def clear_key():
+    db.run(
+        "UPDATE license SET license_key = NULL, source = 'local', "
+        "  remote_status = NULL, offline_since = NULL WHERE tenant_id = ?",
+        (ctx.require(),),
+    )
+
+
+def _hours_offline():
+    since = record()["offline_since"]
+    if not since:
+        return 0.0
+    try:
+        started = _dt.datetime.fromisoformat(str(since))
+    except ValueError:
+        return 0.0
+    return (_dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None) - started).total_seconds() / 3600.0
+
+
+def sync(session=None):
+    """Markazdan holatni oladi va saqlaydi.
+
+    Qaytaradi: (holat, notice | None). Aloqa yo'q bo'lsa mavjud holat
+    saqlanadi — mijoz ishlashda davom etadi.
+    """
+    rec = record()
+    if not rec["license_key"]:
+        return state(), None
+
+    try:
+        payload = licsrv.check(
+            rec["license_key"],
+            bot_username=config.LICENSE_BOT_USERNAME or None,
+            session=session,
+        )
+    except licsrv.Unreachable as e:
+        log.warning("Litsenziya serveri javob bermadi (tenant=%s): %s",
+                    ctx.require(), e)
+        if not rec["offline_since"]:
+            db.run(
+                "UPDATE license SET offline_since = ? WHERE tenant_id = ?",
+                (_dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
+                 ctx.require()),
+            )
+        return state(), None
+
+    mapped = licsrv.map_status(payload)
+    expires = payload.get("expires_at") or rec["expires_at"]
+    db.run(
+        "UPDATE license SET state = ?, remote_status = ?, expires_at = ?, "
+        "  grace_days = ?, price = ?, checked_at = ?, offline_since = NULL, "
+        "  source = 'bmp' WHERE tenant_id = ?",
+        (
+            mapped,
+            payload.get("status"),
+            str(expires)[:10],
+            payload.get("grace_days"),
+            payload.get("price"),
+            _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
+            ctx.require(),
+        ),
+    )
+
+    notice = licsrv.notice_of(payload)
+    if notice and notice["id"] == rec["notice_id"]:
+        notice = None          # bir xil xabar ikki marta ko'rsatilmaydi
+    elif notice:
+        db.run("UPDATE license SET notice_id = ? WHERE tenant_id = ?",
+               (notice["id"], ctx.require()))
+    return mapped, notice
+
+
+def offline_warning():
+    """Uzoq vaqt aloqa yo'q bo'lsa sotuvchiga aytiladigan matn yoki None."""
+    hours = _hours_offline()
+    if hours < licsrv.OFFLINE_TRUST_HOURS:
+        return None
+    return (
+        f"Litsenziya serveri {int(hours)} soatdan beri javob bermayapti. "
+        "Mijozlar ishlashda davom etmoqda."
     )
