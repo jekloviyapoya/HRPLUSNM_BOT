@@ -125,3 +125,26 @@ def test_konfigda_dokonga_xos_qiymat_yoq(app):
             assert word not in text, f"{f} ichida qotirilgan qiymat: {word}"
 
 
+
+
+def test_html_qochirish(app):
+    ui = importlib.import_module("bot.ui")
+    assert ui.escape("<b>&x</b>") == "&lt;b&gt;&amp;x&lt;/b&gt;"
+
+
+def test_sehrgar_qadamini_qaytaradi(app):
+    onboarding = importlib.import_module("bot.onboarding")
+    sessions = importlib.import_module("bot.sessions")
+    assert onboarding.current_step(77) is None
+    sessions.set(77, "setup:shop_name", {})
+    assert onboarding.current_step(77) == "shop_name"
+    sessions.clear(77)
+    assert onboarding.current_step(77) is None
+
+
+def test_har_qadamning_savoli_bor_yoki_reja(app):
+    """QUESTIONS da bo'lmagan qadam resume() da bo'sh xabar bermasin."""
+    onboarding = importlib.import_module("bot.onboarding")
+    keys = {k for k, _, _ in onboarding.STEPS}
+    assert set(onboarding.QUESTIONS) <= keys
+    assert "shop_name" in onboarding.QUESTIONS

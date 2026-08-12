@@ -68,6 +68,11 @@ def register(bot):
             onboarding.start(bot, message)
             return
 
+        step = onboarding.current_step(message.from_user.id)
+        if step:
+            onboarding.resume(bot, message, step)
+            return
+
         if users.role_of(message.from_user.id) is None:
             bot.send_message(
                 message.chat.id,
@@ -84,7 +89,9 @@ def register(bot):
 
         bot.send_message(
             message.chat.id,
-            f"{tenant.shop_name()}\n{license.summary()}{note}",
+            f"<b>{ui.escape(tenant.shop_name())}</b>\n"
+            f"{ui.escape(license.summary())}{ui.escape(note)}",
+            parse_mode="HTML",
             reply_markup=ui.main_menu(message.from_user.id),
         )
 
@@ -93,7 +100,8 @@ def register(bot):
     def _menu(message):
         bot.send_message(
             message.chat.id,
-            tenant.shop_name(),
+            f"<b>{ui.escape(tenant.shop_name())}</b>",
+            parse_mode="HTML",
             reply_markup=ui.main_menu(message.from_user.id),
         )
 

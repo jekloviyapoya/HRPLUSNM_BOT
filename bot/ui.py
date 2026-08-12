@@ -78,6 +78,16 @@ def ack(bot, call, text=None):
         log.debug("answer_callback_query o'tmadi", exc_info=True)
 
 
+def escape(text):
+    """HTML parse_mode uchun. Foydalanuvchi kiritgan matn har doim shu orqali."""
+    return (
+        str(text)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
 def money(amount, currency=""):
     try:
         n = float(amount)

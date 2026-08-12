@@ -5,11 +5,14 @@
 narx-ro'yxati, valyuta, o'lchov birliklari, kanal, ish vaqti.
 
 Har qadam sessiyada saqlanadi — uzilib qolsa o'sha joydan davom etadi.
+
+parse_mode: HTML. Eski Markdown `**` ni tushunmaydi va xato ham bermaydi —
+qalin matn jimgina oddiy matnga aylanadi.
 """
 
 from . import sessions, tenant, ui, users
 
-# Qadam nomi -> (savol matni, o'tkazib yuborsa bo'ladimi)
+# Qadam kaliti -> (menyudagi nomi, o'tkazib yuborsa bo'ladimi)
 STEPS = [
     ("shop_name", "Do'kon nomi", False),
     ("bito_api_key", "Bito API kaliti", False),
@@ -22,13 +25,19 @@ STEPS = [
     ("work_hours", "Ish vaqti va xabar vaqtlari", True),
 ]
 
+# Qadam kaliti -> foydalanuvchiga beriladigan savol
+QUESTIONS = {
+    "shop_name": (
+        "<b>1-qadam.</b> Do'koningiz nomi qanday?\n"
+        "Bu nom hisobotlarda, postlarda va xabarlarda ishlatiladi."
+    ),
+}
+
 WELCOME = (
     "Salom! Bu — do'kon boshqaruv boti.\n\n"
-    "Siz birinchi bo'lib kirdingiz, shuning uchun **egasi** sifatida qayd "
+    "Siz birinchi bo'lib kirdingiz, shuning uchun <b>egasi</b> sifatida qayd "
     "etildingiz. Endi qisqa sozlash boshlanadi — bir necha savol, hammasi "
     "keyin Sozlamalardan o'zgartiriladi.\n\n"
-    "**1-qadam.** Do'koningiz nomi qanday? Bu nom hisobotlarda, "
-    "postlarda va xabarlarda ishlatiladi."
 )
 
 
@@ -45,32 +54,54 @@ def claim_owner(message):
     return True
 
 
+def current_step(tg_id):
+    """Sehrgar davom etayotgan bo'lsa qadam kalitini qaytaradi."""
+    state, _ = sessions.get(tg_id)
+    if state and state.startswith("setup:"):
+        return state.split(":", 1)[1]
+    return None
+
+
 def start(bot, message):
     sessions.set(message.from_user.id, "setup:shop_name", {})
-    bot.send_message(message.chat.id, WELCOME, parse_mode="Markdown")
+    bot.send_message(
+        message.chat.id,
+        WELCOME + QUESTIONS["shop_name"],
+        parse_mode="HTML",
+    )
+
+
+def resume(bot, message, step):
+    """Sehrgar o'rtasida /start bosilsa — savolni qayta beradi, menyu emas."""
+    bot.send_message(
+        message.chat.id,
+        "Sozlash tugallanmagan. Shu savoldan davom etamiz.\n\n"
+        + QUESTIONS.get(step, "Keyingi qadam tayyor emas."),
+        parse_mode="HTML",
+    )
 
 
 def handle_text(bot, message):
     """Sehrgar bosqichidagi matnli javob. True qaytarsa — ishlandi."""
-    state, _ = sessions.get(message.from_user.id)
-    if not state or not state.startswith("setup:"):
+    step = current_step(message.from_user.id)
+    if not step:
         return False
-
-    step = state.split(":", 1)[1]
 
     if step == "shop_name":
         name = (message.text or "").strip()
         if len(name) < 2:
-            bot.send_message(message.chat.id, "Nom juda qisqa. Qaytadan kiriting.")
+            bot.send_message(
+                message.chat.id, "Nom juda qisqa. Qaytadan kiriting."
+            )
             return True
         tenant.set("shop_name", name)
         sessions.clear(message.from_user.id)
         bot.send_message(
             message.chat.id,
-            f"Yozib oldim: **{name}**\n\n"
-            "Qolgan qadamlar (Bito ulanishi, ombor, narx-ro'yxati) keyingi "
+            f"Yozib oldim: <b>{ui.escape(name)}</b>\n\n"
+            "Qolgan qadamlar — Bito ulanishi, ombor, narx-ro'yxati — keyingi "
             "yangilanishda qo'shiladi. Hozircha menyu ochiq.",
-            parse_mode="Markdown",
+            parse_mode="HTML",
             reply_markup=ui.main_menu(message.from_user.id),
         )
         return True
