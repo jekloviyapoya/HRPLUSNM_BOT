@@ -5,9 +5,8 @@ Ma'lumot hech qachon o'chirilmaydi. Qulflanganda faqat kirish cheklanadi.
 
 import datetime as dt
 
-from . import config, db
+from . import config, ctx, db
 from .errors import LicenseError, PlanError
-from .tenant import TENANT_ID
 
 PLANS = ("boshlangich", "standart", "toliq")
 _PLAN_RANK = {p: i for i, p in enumerate(PLANS)}
@@ -32,18 +31,18 @@ def _parse(value):
 
 def ensure():
     """Birinchi ishga tushirishda sinov muddatini ochadi."""
-    if db.row("SELECT tenant_id FROM license WHERE tenant_id = ?", (TENANT_ID,)):
+    if db.row("SELECT tenant_id FROM license WHERE tenant_id = ?", (ctx.require(),)):
         return
     expires = _today() + dt.timedelta(days=config.TRIAL_DAYS)
     db.run(
         "INSERT INTO license (tenant_id, state, expires_at) VALUES (?, 'trial', ?)",
-        (TENANT_ID, expires.isoformat()),
+        (ctx.require(), expires.isoformat()),
     )
 
 
 def record():
     ensure()
-    return db.row("SELECT * FROM license WHERE tenant_id = ?", (TENANT_ID,))
+    return db.row("SELECT * FROM license WHERE tenant_id = ?", (ctx.require(),))
 
 
 def days_left():
@@ -64,7 +63,7 @@ def state():
         now = "locked"
 
     if now != was:
-        db.run("UPDATE license SET state = ? WHERE tenant_id = ?", (now, TENANT_ID))
+        db.run("UPDATE license SET state = ? WHERE tenant_id = ?", (now, ctx.require()))
     return now
 
 
@@ -94,7 +93,7 @@ def extend(date_iso, new_plan=None):
     db.run(
         "UPDATE license SET expires_at = ?, state = 'active', "
         "  plan = COALESCE(?, plan), notified = NULL WHERE tenant_id = ?",
-        (date.isoformat(), new_plan, TENANT_ID),
+        (date.isoformat(), new_plan, ctx.require()),
     )
     return date
 
@@ -102,7 +101,7 @@ def extend(date_iso, new_plan=None):
 def set_plan(new_plan):
     if new_plan not in PLANS:
         raise ValueError(new_plan)
-    db.run("UPDATE license SET plan = ? WHERE tenant_id = ?", (new_plan, TENANT_ID))
+    db.run("UPDATE license SET plan = ? WHERE tenant_id = ?", (new_plan, ctx.require()))
 
 
 def summary():
@@ -139,7 +138,7 @@ def due_reminder():
         marker = f"grace{abs(left)}"
     if not marker or rec["notified"] == marker:
         return None
-    db.run("UPDATE license SET notified = ? WHERE tenant_id = ?", (marker, TENANT_ID))
+    db.run("UPDATE license SET notified = ? WHERE tenant_id = ?", (marker, ctx.require()))
 
     if left > 0:
         return f"⏳ Obuna muddati {left} kundan keyin tugaydi."

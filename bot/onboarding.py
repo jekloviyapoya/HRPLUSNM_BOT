@@ -48,18 +48,6 @@ WELCOME = (
 
 # ----------------------------------------------------------------- egasi
 
-def claim_owner(message):
-    if users.has_owner():
-        return False
-    users.upsert(
-        message.from_user.id,
-        name=(message.from_user.first_name or "").strip() or None,
-        username=message.from_user.username,
-        role="owner",
-    )
-    return True
-
-
 def current_step(tg_id):
     state, _ = sessions.get(tg_id)
     if state and state.startswith("setup:"):
@@ -74,8 +62,10 @@ def pending_summary():
 
 # ----------------------------------------------------------------- qadamlar
 
-def start(bot, message):
-    sessions.set(message.from_user.id, "setup:shop_name", {})
+def start(bot, message, tg_id=None):
+    """tg_id alohida beriladi: tugma javobida message.from_user — bot o'zi."""
+    tg_id = tg_id or message.from_user.id
+    sessions.set(tg_id, "setup:shop_name", {})
     bot.send_message(message.chat.id, WELCOME + Q_SHOP, parse_mode="HTML")
 
 

@@ -14,9 +14,8 @@ import time
 
 import requests
 
-from . import config, db, tenant
+from . import config, ctx, db, tenant
 from .errors import BitoError, SetupError
-from .tenant import TENANT_ID
 
 log = logging.getLogger(__name__)
 
@@ -156,7 +155,7 @@ class Bito:
     def resolve(self, logical):
         cached = db.value(
             "SELECT resolved FROM bito_paths WHERE tenant_id = ? AND logical = ?",
-            (TENANT_ID, logical),
+            (ctx.require(), logical),
         )
         if cached:
             return cached
@@ -170,7 +169,7 @@ class Bito:
                     "VALUES (?, ?, ?) ON CONFLICT (tenant_id, logical) "
                     "DO UPDATE SET resolved = excluded.resolved, "
                     "  checked_at = datetime('now')",
-                    (TENANT_ID, logical, candidate),
+                    (ctx.require(), logical, candidate),
                 )
                 log.info("Bito yo'li aniqlandi: %s -> %s", logical, candidate)
                 return candidate

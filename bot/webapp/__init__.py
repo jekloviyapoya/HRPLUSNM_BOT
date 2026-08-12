@@ -10,7 +10,7 @@ import logging
 
 from flask import Flask, jsonify, render_template
 
-from .. import config, db, license, tenant
+from .. import config, db
 
 log = logging.getLogger(__name__)
 
@@ -31,14 +31,18 @@ def create_app():
 
     @app.get("/")
     def status():
+        total = db.value("SELECT COUNT(*) FROM tenant", default=0)
+        active = db.value(
+            "SELECT COUNT(*) FROM license WHERE state IN ('trial', 'active')",
+            default=0,
+        )
+        staff = db.value("SELECT COUNT(*) FROM users", default=0)
         return render_template(
             "status.html",
             build=config.BUILD_SHA,
-            shop=tenant.shop_name(),
-            setup_done=tenant.setup_done(),
-            plan=license.plan(),
-            state=license.state(),
-            expires=license.record()["expires_at"],
+            total=total,
+            active=active,
+            staff=staff,
         )
 
     @app.errorhandler(404)

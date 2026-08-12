@@ -22,9 +22,12 @@ def app(tmp_path, monkeypatch):
     license_ = importlib.import_module("bot.license")
     users = importlib.import_module("bot.users")
     db.migrate()
-    tenant.ensure_row()
-    license_.ensure()
-    return dict(config=config, db=db, tenant=tenant, license=license_, users=users)
+    ctx = importlib.import_module("bot.ctx")
+    tenants = importlib.import_module("bot.tenants")
+    tid = tenants.create(999, name="Test egasi")
+    ctx.set(tid)
+    return dict(config=config, db=db, tenant=tenant, license=license_,
+                users=users, ctx=ctx, tenants=tenants, tenant_id=tid)
 
 
 def test_migratsiya_ikki_marta_qollanmaydi(app):
@@ -56,11 +59,11 @@ def test_sinov_muddati_ochiladi(app):
 def test_muddat_tugasa_grace_keyin_qulf(app):
     lic, db = app["license"], app["db"]
     past = (dt.date.today() - dt.timedelta(days=1)).isoformat()
-    db.run("UPDATE license SET expires_at = ? WHERE tenant_id = 1", (past,))
+    db.run("UPDATE license SET expires_at = ? WHERE tenant_id = ?", (past, app["tenant_id"]))
     assert lic.state() == "grace"
 
     far = (dt.date.today() - dt.timedelta(days=99)).isoformat()
-    db.run("UPDATE license SET expires_at = ? WHERE tenant_id = 1", (far,))
+    db.run("UPDATE license SET expires_at = ? WHERE tenant_id = ?", (far, app["tenant_id"]))
     assert lic.state() == "locked"
     assert lic.is_locked()
 
@@ -68,8 +71,8 @@ def test_muddat_tugasa_grace_keyin_qulf(app):
 def test_uzaytirgach_faol_boladi(app):
     lic, db = app["license"], app["db"]
     db.run(
-        "UPDATE license SET expires_at = ?, state = 'locked' WHERE tenant_id = 1",
-        ((dt.date.today() - dt.timedelta(days=99)).isoformat(),),
+        "UPDATE license SET expires_at = ?, state = 'locked' WHERE tenant_id = ?",
+        ((dt.date.today() - dt.timedelta(days=99)).isoformat(), app["tenant_id"]),
     )
     assert lic.is_locked()
     lic.extend((dt.date.today() + dt.timedelta(days=30)).isoformat())
@@ -86,12 +89,10 @@ def test_tarif_tekshiruvi(app):
     lic.require_plan("standart")  # xato bermasligi kerak
 
 
-def test_birinchi_odam_egasi_boladi(app):
+def test_biznes_ochgan_odam_egasi_boladi(app):
     users = app["users"]
-    assert not users.has_owner()
-    users.upsert(500, name="Ali", role="owner")
     assert users.has_owner()
-    assert users.role_of(500) == "owner"
+    assert users.role_of(999) == "owner"
 
 
 def test_rol_yetmasa_xato(app):

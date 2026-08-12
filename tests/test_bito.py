@@ -53,7 +53,8 @@ def env(tmp_path, monkeypatch):
             del sys.modules[name]
     db = importlib.import_module("bot.db")
     db.migrate()
-    importlib.import_module("bot.tenant").ensure_row()
+    tid = importlib.import_module("bot.tenants").create(555)
+    importlib.import_module("bot.ctx").set(tid)
     return importlib.import_module("bot.bito")
 
 

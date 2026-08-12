@@ -1,8 +1,7 @@
 """Foydalanuvchilar va rollar."""
 
-from . import config, db
+from . import config, ctx, db
 from .errors import AccessError
-from .tenant import TENANT_ID
 
 ROLES = ("owner", "manager", "staff")
 _RANK = {"staff": 0, "manager": 1, "owner": 2}
@@ -11,7 +10,7 @@ _RANK = {"staff": 0, "manager": 1, "owner": 2}
 def get(tg_id):
     return db.row(
         "SELECT * FROM users WHERE tenant_id = ? AND tg_id = ?",
-        (TENANT_ID, tg_id),
+        (ctx.require(), tg_id),
     )
 
 
@@ -19,7 +18,7 @@ def has_owner():
     return bool(
         db.value(
             "SELECT 1 FROM users WHERE tenant_id = ? AND role = 'owner' LIMIT 1",
-            (TENANT_ID,),
+            (ctx.require(),),
         )
     )
 
@@ -32,13 +31,13 @@ def upsert(tg_id, name=None, username=None, role=None):
             "  username = COALESCE(?, username), role = COALESCE(?, role), "
             "  last_seen = datetime('now') "
             "WHERE tenant_id = ? AND tg_id = ?",
-            (name, username, role, TENANT_ID, tg_id),
+            (name, username, role, ctx.require(), tg_id),
         )
     else:
         db.run(
             "INSERT INTO users (tenant_id, tg_id, name, username, role, last_seen) "
             "VALUES (?, ?, ?, ?, ?, datetime('now'))",
-            (TENANT_ID, tg_id, name, username, role or "staff"),
+            (ctx.require(), tg_id, name, username, role or "staff"),
         )
     return get(tg_id)
 
@@ -66,7 +65,7 @@ def touch(tg_id):
     db.run(
         "UPDATE users SET last_seen = datetime('now') "
         "WHERE tenant_id = ? AND tg_id = ?",
-        (TENANT_ID, tg_id),
+        (ctx.require(), tg_id),
     )
 
 
@@ -75,5 +74,5 @@ def listing():
         "SELECT * FROM users WHERE tenant_id = ? AND active = 1 "
         "ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'manager' THEN 1 "
         "ELSE 2 END, name",
-        (TENANT_ID,),
+        (ctx.require(),),
     )
