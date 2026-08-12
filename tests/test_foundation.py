@@ -142,9 +142,19 @@ def test_sehrgar_qadamini_qaytaradi(app):
     assert onboarding.current_step(77) is None
 
 
-def test_har_qadamning_savoli_bor_yoki_reja(app):
-    """QUESTIONS da bo'lmagan qadam resume() da bo'sh xabar bermasin."""
+def test_sehrgar_qadamlari_sozlama_kalitlari(app):
+    """STEPS dagi har kalit tenant sozlamasi bo'lishi kerak."""
     onboarding = importlib.import_module("bot.onboarding")
-    keys = {k for k, _, _ in onboarding.STEPS}
-    assert set(onboarding.QUESTIONS) <= keys
-    assert "shop_name" in onboarding.QUESTIONS
+    tenant = app["tenant"]
+    for key, label in onboarding.STEPS:
+        assert isinstance(label, str) and label
+        assert tenant.get(key) is None  # toza bazada hammasi bo'sh
+    assert onboarding.STEPS[0][0] == "shop_name"
+
+
+def test_pending_summary_sozlangach_qisqaradi(app):
+    onboarding = importlib.import_module("bot.onboarding")
+    tenant = app["tenant"]
+    before = len(onboarding.pending_summary())
+    tenant.set("shop_name", "X")
+    assert len(onboarding.pending_summary()) == before - 1

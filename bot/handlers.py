@@ -182,6 +182,14 @@ def register(bot):
                 log.warning("E'lon yuborilmadi: %s", u["tg_id"], exc_info=True)
         bot.send_message(message.chat.id, f"Yuborildi: {sent} ta")
 
+    # -------------------------------------------------------- sehrgar tugmasi
+
+    @bot.callback_query_handler(func=lambda c: (c.data or "").startswith("setup:"))
+    @safe
+    def _setup_click(call):
+        ui.ack(bot, call)
+        onboarding.handle_callback(bot, call)
+
     # ---------------------------------------------------------- menyu tugmasi
 
     @bot.callback_query_handler(func=lambda c: (c.data or "").startswith("menu:"))
