@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ shop }} — holat{% endblock %}
+
+{% block content %}
+<p class="eyebrow">Ishlab turibdi</p>
+<p class="build">{{ build }}</p>
+
+<dl class="facts">
+  <div class="fact">
+    <dt>Do'kon</dt>
+    <dd>{{ shop }}</dd>
+  </div>
+  <div class="fact">
+    <dt>Sozlash</dt>
+    <dd>{% if setup_done %}tugagan{% else %}tugallanmagan{% endif %}</dd>
+  </div>
+  <div class="fact">
+    <dt>Obuna</dt>
+    <dd>{{ state }}</dd>
+  </div>
+  <div class="fact">
+    <dt>Tarif</dt>
+    <dd>{{ plan }}</dd>
+  </div>
+  <div class="fact">
+    <dt>Muddat</dt>
+    <dd>{{ expires }}</dd>
+  </div>
+</dl>
+
+<p class="note">
+  Boshqaruv Telegram bot ichida. Bu sahifa faqat deploy holatini ko'rsatadi.
+</p>
+{% endblock %}
