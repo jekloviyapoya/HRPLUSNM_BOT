@@ -4,54 +4,43 @@ import logging
 
 from telebot import types
 
-from . import license, users
-
 log = logging.getLogger(__name__)
 
-# Rol -> menyu bandlari. Keyingi bosqichlarda shu ro'yxat to'ldiriladi.
-MENU = {
-    "owner": [
-        ("📦 Ombor", "menu:ombor"),
-        ("🧾 Nakladnoy", "menu:nakladnoy"),
-        ("📊 Moliya", "menu:moliya"),
-        ("👥 Xodimlar", "menu:xodimlar"),
-        ("📋 Vazifalar", "menu:vazifalar"),
-        ("📣 Marketing", "menu:marketing"),
-        ("⚙️ Sozlamalar", "menu:sozlamalar"),
-        ("💳 Obuna", "menu:obuna"),
-    ],
-    "manager": [
-        ("📦 Ombor", "menu:ombor"),
-        ("🧾 Nakladnoy", "menu:nakladnoy"),
-        ("👥 Xodimlar", "menu:xodimlar"),
-        ("📋 Vazifalar", "menu:vazifalar"),
-    ],
-    "staff": [
-        ("📋 Vazifalarim", "menu:vazifalar"),
-        ("📦 Zarur mahsulot", "menu:zarur"),
-    ],
-}
+BASE_ITEMS = [
+    ("⚙️ Sozlamalar", "menu:sozlamalar"),
+    ("💳 Obuna", "menu:obuna"),
+]
 
-LOCKED_MENU = [
+LOCKED_ITEMS = [
     ("💳 Obuna", "menu:obuna"),
     ("❓ Yordam", "menu:yordam"),
 ]
 
 
 def main_menu(tg_id):
+    """Menyu modul reyestridan quriladi.
+
+    Yoqilmagan modul tugmasi umuman ko'rinmaydi — mijoz sotib olmagan
+    narsani ko'rib turishi kerak emas.
+    """
+    from . import license, modules, users
+
     kb = types.InlineKeyboardMarkup(row_width=2)
     if license.is_locked():
-        items = LOCKED_MENU
+        items = LOCKED_ITEMS
     else:
         role = "owner" if users.is_seller(tg_id) else (users.role_of(tg_id) or "staff")
-        items = MENU.get(role, MENU["staff"])
+        items = modules.menu_items(role)
+        if role in ("owner", "manager"):
+            items = items + BASE_ITEMS
+        else:
+            items = items + [("❓ Yordam", "menu:yordam")]
+
     for i in range(0, len(items), 2):
-        kb.row(
-            *[
-                types.InlineKeyboardButton(text, callback_data=data)
-                for text, data in items[i:i + 2]
-            ]
-        )
+        kb.row(*[
+            types.InlineKeyboardButton(text, callback_data=data)
+            for text, data in items[i:i + 2]
+        ])
     return kb
 
 

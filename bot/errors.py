@@ -37,17 +37,6 @@ class BitoError(BotError):
         super().__init__(message or "Bito bilan aloqada xato.")
 
 
-class PlanError(BotError):
-    """Tarif yetmaydi."""
-
-    def __init__(self, needed):
-        self.needed = needed
-        super().__init__(
-            f"Bu funksiya «{needed}» tarifida ochiladi. "
-            "💳 Obuna bo'limidan ko'tarishingiz mumkin."
-        )
-
-
 class LicenseError(BotError):
     """Obuna muddati tugagan."""
 

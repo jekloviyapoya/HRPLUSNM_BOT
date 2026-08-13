@@ -12,6 +12,7 @@ import telebot
 from waitress import serve
 
 from bot import config, db, handlers, jobs
+from bot.modules import registry
 from bot.webapp import create_app
 
 logging.basicConfig(
@@ -37,6 +38,8 @@ def main():
 
     applied = db.migrate()
     log.info("Migratsiyalar: %s", applied or "yangisi yo'q")
+    registry.load()
+
     threading.Thread(target=_serve_web, daemon=True, name="web").start()
 
     telebot.apihelper.RETRY_ON_ERROR = True

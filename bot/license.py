@@ -4,21 +4,13 @@ Ma'lumot hech qachon o'chirilmaydi. Qulflanganda faqat kirish cheklanadi.
 """
 
 import datetime as dt
+import json as _json
 import logging
 
 from . import config, ctx, db
-from .errors import LicenseError, PlanError
+from .errors import LicenseError
 
 log = logging.getLogger(__name__)
-
-PLANS = ("boshlangich", "standart", "toliq")
-_PLAN_RANK = {p: i for i, p in enumerate(PLANS)}
-
-PLAN_LABELS = {
-    "boshlangich": "Boshlang'ich",
-    "standart": "Standart",
-    "toliq": "To'liq",
-}
 
 # Qulflanganda ham ochiq qoladigan bo'limlar
 ALWAYS_OPEN = {"obuna", "yordam", "start"}
@@ -36,10 +28,17 @@ def ensure():
     """Birinchi ishga tushirishda sinov muddatini ochadi."""
     if db.row("SELECT tenant_id FROM license WHERE tenant_id = ?", (ctx.require(),)):
         return
+    from . import modules as _modules  # aylanma importdan qochish
+
     expires = _today() + dt.timedelta(days=config.TRIAL_DAYS)
     db.run(
-        "INSERT INTO license (tenant_id, state, expires_at) VALUES (?, 'trial', ?)",
-        (ctx.require(), expires.isoformat()),
+        "INSERT INTO license (tenant_id, state, expires_at, modules) "
+        "VALUES (?, 'trial', ?, ?)",
+        (
+            ctx.require(),
+            expires.isoformat(),
+            _json.dumps(list(_modules.TRIAL_MODULES)),
+        ),
     )
 
 
@@ -76,10 +75,6 @@ def state():
     return now
 
 
-def plan():
-    return record()["plan"]
-
-
 def is_locked():
     return state() == "locked"
 
@@ -91,26 +86,15 @@ def require_active(section=None):
         raise LicenseError()
 
 
-def require_plan(needed):
-    if _PLAN_RANK.get(plan(), 0) < _PLAN_RANK[needed]:
-        raise PlanError(PLAN_LABELS[needed])
-
-
-def extend(date_iso, new_plan=None):
-    """Sotuvchi qo'lda uzaytiradi: /set_license YYYY-MM-DD"""
+def extend(date_iso):
+    """Sotuvchi qo'lda uzaytiradi: /set_license <biznes_id> YYYY-MM-DD"""
     date = _parse(date_iso)
     db.run(
         "UPDATE license SET expires_at = ?, state = 'active', "
-        "  plan = COALESCE(?, plan), notified = NULL WHERE tenant_id = ?",
-        (date.isoformat(), new_plan, ctx.require()),
+        "  notified = NULL WHERE tenant_id = ?",
+        (date.isoformat(), ctx.require()),
     )
     return date
-
-
-def set_plan(new_plan):
-    if new_plan not in PLANS:
-        raise ValueError(new_plan)
-    db.run("UPDATE license SET plan = ? WHERE tenant_id = ?", (new_plan, ctx.require()))
 
 
 def summary():
@@ -127,9 +111,12 @@ def summary():
         tail = f"{left} kun qoldi"
     else:
         tail = f"{abs(left)} kun oldin tugagan"
+    from . import modules  # aylanma importdan qochish
+
+    count = len(modules.list_enabled())
     return (
         f"Holat: {labels[st]}\n"
-        f"Tarif: {PLAN_LABELS[rec['plan']]}\n"
+        f"Modullar: {count} ta yoqilgan\n"
         f"Muddat: {rec['expires_at']} ({tail})"
     )
 
@@ -230,7 +217,14 @@ def sync(session=None):
         return state(), None
 
     mapped = licsrv.map_status(payload)
-    expires = payload.get("expires_at") or rec["expires_at"]
+    expires = licsrv.expires_of(payload) or rec["expires_at"]
+
+    # modules yo'q bo'lsa oxirgi ma'lum ro'yxat saqlanadi — server
+    # nosozligi mijozning barcha modullarini o'chirib qo'ymasin
+    incoming = licsrv.modules_of(payload)
+    if incoming is not None:
+        from . import modules as _modules
+        _modules.set_enabled(incoming)
     db.run(
         "UPDATE license SET state = ?, remote_status = ?, expires_at = ?, "
         "  grace_days = ?, price = ?, checked_at = ?, offline_since = NULL, "

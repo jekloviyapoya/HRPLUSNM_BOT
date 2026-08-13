@@ -125,15 +125,20 @@ class ctx_code:
         return self.scope.__exit__(*exc)
 
 
-def test_obuna_har_biznesda_alohida(mod):
-    t, ctx, lic = mod["tenants"], mod["ctx"], mod["license"]
+def test_modullar_har_biznesda_alohida(mod):
+    t, ctx = mod["tenants"], mod["ctx"]
+    modules = importlib.import_module("bot.modules")
     a, b = t.create(7001), t.create(7002)
     with ctx.scope(a):
-        lic.set_plan("toliq")
+        modules.set_enabled(["xodimlar", "ombor"])
     with ctx.scope(b):
-        assert lic.plan() == "boshlangich"
+        modules.set_enabled(["mijoz"])
     with ctx.scope(a):
-        assert lic.plan() == "toliq"
+        assert modules.list_enabled() == ["xodimlar", "ombor"]
+        assert modules.enabled("ombor")
+    with ctx.scope(b):
+        assert modules.list_enabled() == ["mijoz"]
+        assert not modules.enabled("ombor")
 
 
 def test_threadlar_orasida_kontekst_oqmaydi(mod):

@@ -79,14 +79,12 @@ def test_uzaytirgach_faol_boladi(app):
     assert lic.state() == "active"
 
 
-def test_tarif_tekshiruvi(app):
-    lic = app["license"]
-    errors = importlib.import_module("bot.errors")
-    lic.set_plan("boshlangich")
-    with pytest.raises(errors.PlanError):
-        lic.require_plan("toliq")
-    lic.set_plan("toliq")
-    lic.require_plan("standart")  # xato bermasligi kerak
+def test_modul_tekshiruvi(app):
+    modules = importlib.import_module("bot.modules")
+    modules.set_enabled(["xodimlar"])
+    modules.require("xodimlar")          # xato bermasligi kerak
+    with pytest.raises(modules.ModuleError):
+        modules.require("nakladnoy")
 
 
 def test_biznes_ochgan_odam_egasi_boladi(app):

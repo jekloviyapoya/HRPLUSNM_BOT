@@ -7,8 +7,9 @@ aniqlab, ctx ga qo'yish. Busiz hech bir so'rov bajarilmaydi.
 import functools
 import logging
 
-from . import (config, ctx, db, license, onboarding, sessions, tenant,
-               tenants, ui, users)
+from . import (config, ctx, db, license, modules, onboarding, sessions,
+               tenant, tenants, ui, users)
+from .modules import registry
 from .errors import BotError
 
 log = logging.getLogger(__name__)
@@ -203,7 +204,7 @@ def register(bot):
         if len(parts) < 3:
             bot.send_message(
                 message.chat.id,
-                "Ishlatilishi: /set_license <biznes_id> YYYY-MM-DD [tarif]\n"
+                "Ishlatilishi: /set_license <biznes_id> YYYY-MM-DD\n"
                 "Biznes ro'yxati: /saas",
             )
             return
@@ -212,16 +213,12 @@ def register(bot):
         except ValueError:
             bot.send_message(message.chat.id, "Biznes ID raqam bo'lishi kerak.")
             return
-        plan = parts[3] if len(parts) > 3 else None
         try:
             with ctx.scope(tenant_id):
-                date = license.extend(parts[2], plan)
+                date = license.extend(parts[2])
                 name = tenant.shop_name()
         except ValueError:
-            bot.send_message(
-                message.chat.id,
-                "Sana formati: YYYY-MM-DD. Tarif: boshlangich | standart | toliq",
-            )
+            bot.send_message(message.chat.id, "Sana formati: YYYY-MM-DD")
             return
         bot.send_message(
             message.chat.id, f"#{tenant_id} {name}: muddat {date} gacha."
@@ -229,6 +226,54 @@ def register(bot):
         for owner in tenants.owners_of(tenant_id):
             try:
                 bot.send_message(owner, f"✅ Obuna {date} gacha uzaytirildi.")
+            except Exception:  # noqa: BLE001
+                log.warning("Egaga xabar ketmadi: %s", owner, exc_info=True)
+
+    @bot.message_handler(commands=["set_modules"])
+    @safe
+    def _set_modules(message):
+        if not users.is_seller(message.from_user.id):
+            return
+        parts = (message.text or "").split()
+        if len(parts) < 2:
+            bot.send_message(
+                message.chat.id,
+                "Ishlatilishi: /set_modules <biznes_id> kalit,kalit,...\n\n"
+                "Mavjud kalitlar:\n"
+                + "\n".join(f"  {s.key} — {s.title}" for s in registry.CATALOG)
+                + "\n\nHammasini o'chirish: /set_modules <biznes_id> -",
+            )
+            return
+        try:
+            tenant_id = int(parts[1])
+        except ValueError:
+            bot.send_message(message.chat.id, "Biznes ID raqam bo'lishi kerak.")
+            return
+
+        raw = parts[2] if len(parts) > 2 else "-"
+        keys = [] if raw == "-" else [
+            k.strip() for k in raw.replace(" ", ",").split(",") if k.strip()
+        ]
+        unknown = [k for k in keys if k not in registry.BY_KEY]
+        if unknown:
+            bot.send_message(
+                message.chat.id, f"Noma'lum kalit: {', '.join(unknown)}"
+            )
+            return
+
+        with ctx.scope(tenant_id):
+            resolved = modules.set_enabled(keys)
+            name = tenant.shop_name()
+        added = [k for k in resolved if k not in keys]
+        text = f"#{tenant_id} {name}: {len(resolved)} ta modul"
+        if added:
+            text += f"\nBog'liqligi uchun qo'shildi: {', '.join(added)}"
+        text += "\n" + (", ".join(resolved) if resolved else "(bo'sh)")
+        bot.send_message(message.chat.id, text)
+
+        for owner in tenants.owners_of(tenant_id):
+            try:
+                bot.send_message(owner, "🔄 Modullaringiz yangilandi. /menu")
             except Exception:  # noqa: BLE001
                 log.warning("Egaga xabar ketmadi: %s", owner, exc_info=True)
 
@@ -279,7 +324,7 @@ def register(bot):
                 "Savol bo'lsa do'kon egasiga yoki sotuvchiga yozing.",
             )
             return
-        if section == "xodimlar":
+        if section == "sozlamalar":
             _staff_panel(call)
             return
 
@@ -288,6 +333,26 @@ def register(bot):
             f"«{section}» bo'limi keyingi bosqichda ochiladi.",
             reply_markup=ui.main_menu(call.from_user.id),
         )
+
+    # Modul handlerlari: `mod:<kalit>:...` — har biri guard orqali o'tadi
+    def guard(module_key):
+        """Modul handlerini o'raydi: yoqilganini tekshiradi."""
+
+        def decorator(fn):
+            @functools.wraps(fn)
+            def wrapper(obj, *args, **kwargs):
+                modules.require(module_key)
+                return fn(obj, *args, **kwargs)
+
+            return safe(wrapper)
+
+        return decorator
+
+    for _spec in registry.implemented():
+        try:
+            _spec.impl.register(bot, guard(_spec.key))
+        except Exception:  # noqa: BLE001
+            log.exception("Modul handlerlari biriktirilmadi: %s", _spec.key)
 
     def _subscription(call):
         rec = license.record()
@@ -304,6 +369,19 @@ def register(bot):
             lines.append("")
             lines.append("Litsenziya kaliti kiritilmagan — sinov muddati.")
 
+        lines.append("")
+        lines.append("<b>Modullar</b>")
+        for spec, on, ready in modules.catalog_status():
+            if on and ready:
+                mark = "✅"
+            elif on:
+                mark = "🔧"       # yoqilgan, lekin hali yozilmagan
+            else:
+                mark = "▫️"
+            lines.append(f"{mark} {spec.title} — {ui.escape(spec.summary)}")
+        lines.append("")
+        lines.append("Qo'shimcha modul kerak bo'lsa sotuvchiga yozing.")
+
         buttons = []
         if users.role_of(call.from_user.id) == "owner":
             buttons.append(
@@ -312,12 +390,12 @@ def register(bot):
             )
             if rec["license_key"]:
                 buttons.append(("🔄 Hozir tekshirish", "lic:sync"))
-        bot.send_message(
-            call.message.chat.id,
-            "\n".join(lines),
-            reply_markup=ui.buttons(buttons, row_width=1, back="menu:root")
-            if buttons else None,
-        )
+        for chunk in ui.chunks("\n".join(lines)):
+            bot.send_message(
+                call.message.chat.id, chunk, parse_mode="HTML",
+                reply_markup=ui.buttons(buttons, row_width=1, back="menu:root")
+                if buttons else None,
+            )
 
     @bot.callback_query_handler(func=lambda c: (c.data or "").startswith("lic:"))
     @safe

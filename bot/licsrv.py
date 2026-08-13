@@ -107,11 +107,36 @@ def map_status(payload):
     return "locked"
 
 
+def modules_of(payload):
+    """Javobdagi modullar ro'yxati yoki None.
+
+    None qaytsa — oxirgi ma'lum ro'yxat saqlanadi. Bo'sh ro'yxat deb
+    hisoblanmaydi: aks holda server nosozligi barcha modullarni o'chirardi.
+    """
+    raw = payload.get("modules")
+    if not isinstance(raw, list):
+        return None
+    return [str(k) for k in raw if isinstance(k, (str, int))]
+
+
+def expires_of(payload):
+    """`expires_at` yoki `expires` — ikkala nom ham qabul qilinadi."""
+    for field in ("expires_at", "expires"):
+        value = payload.get(field)
+        if value:
+            return str(value)[:10]
+    return None
+
+
 def notice_of(payload):
     """Mijozga ko'rsatiladigan xabar yoki None."""
     notice = payload.get("notice")
     if not isinstance(notice, dict):
-        return None
+        # Soddalashtirilgan shakl: {"message": "matn"}
+        message = (payload.get("message") or "").strip()
+        if not message:
+            return None
+        return {"id": message[:40], "level": "info", "text": message}
     text = (notice.get("text") or "").strip()
     if not text:
         return None
