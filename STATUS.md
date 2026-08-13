@@ -1,7 +1,10 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `c2e56c5`
+> Oxirgi yangilanish: 2026-08-14 · commit `e50e826`
+>
+> **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
+> yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
 
 ---
 
@@ -41,7 +44,15 @@
 - Bog'liqlik avtomatik qo'shiladi (`ombor_ai` → `ombor`)
 - `/set_modules <biznes_id> kalit,kalit`
 
-**Testlar:** 58 ta, hammasi o'tadi.
+**Shartnomaga muvofiqlik** (`tests/test_contract.py`)
+- `CONTRACT.md` §1 dagi javob namunasi aynan ko'chirilgan va sinaladi
+- Tekshiriladi: 12 soniyalik uzilish, `?key=&bot=`, 200+`invalid`,
+  503 → offline, bo'sh `[]` va maydon yo'qligining farqi, `notice.id`
+  barqarorligi, `expired` → grace/qulf, modul kalitlari va bog'liqliklari,
+  kalitning niqoblanishi
+- Shartnoma o'zgarsa bu testlar yiqiladi — bu maqsad
+
+**Testlar:** 70 ta, hammasi o'tadi.
 
 ---
 
@@ -78,14 +89,20 @@ qolganlari. Har modul alohida push, sinovlari bilan.
 
 ## Ochiq savollar
 
-1. **`CONTRACT.md` o'qilmadi.** Token `BMP_BOT` repoga kira olmaydi
-   (`Not Found`). Contents: Read ruxsati kerak. Shu sababli hozirgi kod
-   avvalgi kelishuvlarga qurilgan — shartnoma bilan solishtirilmagan
-2. **`/api/usage` hali yo'q.** Modul limitlari (masalan oyiga nechta nakladnoy)
-   BMP tomonida tayyor bo'lgach ulanadi
-3. **`modules` maydoni** `/api/check` javobida hali kelmaydi. Kod tayyor:
-   maydon yo'q bo'lsa oxirgi ma'lum ro'yxat saqlanadi, mijoz modullarini
-   yo'qotmaydi
+1. **72 soatdan keyin nima bo'ladi?** `CONTRACT.md` §1.1: «mijoz 503 ni
+   offline deb qabul qiladi va oxirgi holatda ishlashda davom etadi
+   (72 soat)». Undan keyingi xulq aytilmagan.
+   Hozirgi kod: **qulflamaydi**, faqat sotuvchiga ogohlantirish yuboradi.
+   Sabab — BMP uzoq yiqilsa 50 ta biznes to'xtashi serverning o'zi
+   yo'qligidan yomonroq. Agar shartnoma 72 soatdan keyin qulflashni
+   ko'zda tutsa — ayting, bir qatorlik o'zgarish
+2. **`modules_detail` saqlanmaydi.** HRPLUSNM modullari limitsiz (yoq/o'chir),
+   shuning uchun hozircha kerak emas. `/api/usage` faqat limitli modullar
+   uchun — HRPLUSNM'da bittasi ham yo'q. Limitli modul paydo bo'lsa,
+   migratsiya + `usage()` chaqiruvi qo'shiladi
+3. **`business_name` ishlatilmaydi.** Do'kon nomi mijozning o'zidan olinadi
+   (sehrgarda). BMP'dagi nom bilan solishtirish foydali bo'lishi mumkin —
+   kerak bo'lsa qo'shaman
 4. **Tugma bilan tanlash yo'li sinalmagan.** Bonnu'da har biridan bitta
    tashkilot/ombor bo'lgani uchun sehrgar avtomatik o'tadi. Bir nechta variant
    bo'lgan mijozda bu yo'l birinchi marta ishlaydi
