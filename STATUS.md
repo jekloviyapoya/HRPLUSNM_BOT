@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · zarur mahsulotlar (PARITY 3-band)
+> Oxirgi yangilanish: 2026-08-14 · vazifa tarixi va hisoboti (PARITY 4-band)
 >
 > **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
@@ -345,7 +345,11 @@ almashtirishi so'raladi. Keyin Sozlamalar → Hisob dan istalgan payt.
 - Fon xabari uchun bot `_register` da modul darajasida saqlanadi
   (`_NOTIFY_BOT`) — modul jobs() botsiz chaqiriladi
 
-**Testlar:** 436 ta, hammasi o'tadi.
+**Vazifa tarixi va hisoboti** — PARITY 4-band
+- `history_rows/history_text`, `stat_counts/stat_text` — sof funksiyalar,
+  UI dan ajratilgan. Samaradorlik = bajarildi / jami (market-bot kabi)
+
+**Testlar:** 440 ta, hammasi o'tadi.
 
 ---
 

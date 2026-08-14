@@ -363,3 +363,47 @@ def test_oddiy_vazifa_takrorlanmaydi(env):
     env["db"].run("UPDATE task SET status = 'bajarildi' WHERE id = ?",
                   (task_id,))
     assert v.spawn_next(task_id) is None
+
+
+# --- tarix va hisobot (PARITY 4-band) ---
+
+
+def test_tarix_oxirgisi_birinchi(env):
+    v = env["v"]
+    a = v.create("Birinchi vazifa", created_by=111, assigned_to=222)
+    b = v.create("Ikkinchi vazifa", created_by=111, assigned_to=222)
+    rows = v.history_rows(222)
+    assert [r["id"] for r in rows] == [b, a]
+    text = v.history_text(rows, "Xodim")
+    assert text.index("Ikkinchi") < text.index("Birinchi")
+
+
+def test_tarix_hamma_va_belgi(env):
+    v = env["v"]
+    t = v.create("Yopilgan ish", created_by=111, assigned_to=222)
+    env["db"].run("UPDATE task SET status = 'bajarildi', late = 1 "
+                  "WHERE id = ?", (t,))
+    v.create("Ochiq ish", created_by=111, assigned_to=333)
+    rows = v.history_rows(None)
+    assert len(rows) == 2
+    text = v.history_text(rows, "Barcha")
+    assert "✅" in text and "🆕" in text and "⏰" in text
+
+
+def test_hisobot_foiz_va_samaradorlik(env):
+    v = env["v"]
+    for status in ("bajarildi", "bajarildi", "bajarildi", "bekor"):
+        t = v.create("Ish " + status, created_by=111, assigned_to=222)
+        env["db"].run("UPDATE task SET status = ? WHERE id = ?", (status, t))
+    total, counts, late = v.stat_counts(222)
+    assert (total, counts["bajarildi"], late) == (4, 3, 0)
+    text = v.stat_text("Xodim", total, counts, late)
+    assert "Jami: <b>4</b>" in text
+    assert "75%" in text                      # bajarildi ulushi
+    assert "Samaradorlik: <b>75%</b>" in text
+    assert "███████░░░" in text
+
+
+def test_hisobot_bosh(env):
+    v = env["v"]
+    assert "vazifalar yo'q" in v.stat_text("X", *v.stat_counts(999))

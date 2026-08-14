@@ -46,7 +46,10 @@ Tartib — do'konga foyda bo'yicha. Yopilganda SHA yoziladi.
    xabar. Fon kuzatuvchisi (30 daq): baseline usuli — birinchi
    tekshiruvda qoldiq yoziladi, keyin oshsa «keldi», qator o'chadi va
    qo'shganga xabar
-4. **📋 Vazifa tarixi** + 📊 Vazifa hisoboti (kesimlar). 13579-qator
+4. ~~📋 Vazifa tarixi + 📊 Hisobot~~ — **yopildi** (`vazifalar`).
+   Menejer: panel → Tarix/Hisobot, «Hammasi» yoki xodim bo'yicha;
+   xodim menyusida «Vazifa tarixim». Hisobot: holatlar foiz chiziqlari,
+   samaradorlik, kechikkanlar soni; tarixda ⏰ va 🔁 belgilari
 5. **📆 Haftalik / 🗓 Muddatli hisobot** — xodimning davriy hisobotlari.
    11288/11308-qator
 6. **📢 Takliflar va Shikoyatlar** — XODIM taklif/shikoyati (mijoznikidan

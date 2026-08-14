@@ -282,7 +282,8 @@ class Vazifalar(base.Module):
     def menu(self, role):
         if role in ("owner", "manager"):
             return [("📋 Vazifalar", "mod:vazifalar:panel")]
-        return [("📋 Vazifalarim", "mod:vazifalar:menikilar")]
+        return [("📋 Vazifalarim", "mod:vazifalar:menikilar"),
+                ("📋 Vazifa tarixim", "mod:vazifalar:tarix_men")]
 
     def register(self, bot, guard):
         _register(bot, guard)
@@ -381,6 +382,76 @@ def check_overdue(notify=None):
     return marked
 
 
+
+# ------------------------------------------------- tarix va hisobot
+# market-bot tengligi (PARITY 4-band). Tarix: oxirgi 20 ta, holat belgisi
+# va sana bilan, rasmli vazifalarga tugma. Hisobot: holatlar kesimi
+# foiz chiziqlari va samaradorlik bilan.
+
+STATUS_ICONS = {"yangi": "🆕", "bajarilmoqda": "🔄", "tekshiruvda": "👀",
+                "bajarildi": "✅", "qaytarildi": "↩️", "bekor": "🚫"}
+
+
+def history_rows(target=None, limit=20):
+    """target=None — hamma. Eng yangisi birinchi."""
+    if target is None:
+        return db.rows("SELECT * FROM task WHERE tenant_id = ? "
+                       "ORDER BY id DESC LIMIT ?", (ctx.require(), limit))
+    return db.rows("SELECT * FROM task WHERE tenant_id = ? "
+                   "AND assigned_to = ? ORDER BY id DESC LIMIT ?",
+                   (ctx.require(), target, limit))
+
+
+def history_text(rows, title):
+    if not rows:
+        return f"📭 <b>{ui.escape(title)}</b> uchun vazifalar yo'q."
+    lines = [f"📋 <b>{ui.escape(title)} — vazifa tarixi</b>", ""]
+    for task in rows:
+        icon = STATUS_ICONS.get(task["status"], "⏳")
+        short = task["title"][:40] + ("…" if len(task["title"]) > 40 else "")
+        day = str(task["created_at"] or "")[:10]
+        late = " ⏰" if task["late"] else ""
+        repeat = " 🔁" if task["repeat_rule"] else ""
+        lines.append(f"{icon} <b>{ui.escape(short)}</b>{late}{repeat}")
+        lines.append(f"   📅 {day} · {STATUS_LABELS.get(task['status'], '')}")
+    return "\n".join(lines)
+
+
+def stat_counts(target=None):
+    """Holatlar kesimi. Qaytadi: (jami, {status: son}, kechikkan)."""
+    if target is None:
+        rows = db.rows("SELECT status, late FROM task WHERE tenant_id = ?",
+                       (ctx.require(),))
+    else:
+        rows = db.rows("SELECT status, late FROM task WHERE tenant_id = ? "
+                       "AND assigned_to = ?", (ctx.require(), target))
+    counts = {}
+    late = 0
+    for row in rows:
+        counts[row["status"]] = counts.get(row["status"], 0) + 1
+        late += 1 if row["late"] else 0
+    return len(rows), counts, late
+
+
+def stat_text(title, total, counts, late):
+    if not total:
+        return f"📭 <b>{ui.escape(title)}</b>: vazifalar yo'q."
+    lines = [f"📊 <b>{ui.escape(title)}</b>", "",
+             f"Jami: <b>{total}</b> ta", ""]
+    for status, label in STATUS_LABELS.items():
+        n = counts.get(status, 0)
+        if not n:
+            continue
+        pct = round(n / total * 100)
+        bar = "█" * (pct // 10) + "░" * (10 - pct // 10)
+        lines.append(f"{label}: {n} ta — <b>{pct}%</b> {bar}")
+    done = counts.get("bajarildi", 0)
+    lines += ["", f"🎯 Samaradorlik: <b>{round(done / total * 100)}%</b>"]
+    if late:
+        lines.append(f"⏰ Kechikkan: {late} ta")
+    return "\n".join(lines)
+
+
 def _register(bot, guard):
     @bot.callback_query_handler(
         func=lambda c: (c.data or "").startswith("mod:vazifalar:"))
@@ -397,6 +468,38 @@ def _register(bot, guard):
         elif action == "yangi":
             sessions.set(tg_id, "vaz:matn", {})
             bot.send_message(chat_id, "Vazifa matnini yozing.")
+        elif action == "tarix_men":
+            rows = history_rows(tg_id)
+            me = users.get(tg_id)
+            for chunk in ui.chunks(history_text(
+                    rows, (me["name"] if me else None) or "Siz")):
+                bot.send_message(chat_id, chunk, parse_mode="HTML")
+        elif action in ("tarix", "hisobot"):
+            users.require_role(tg_id, "manager")
+            prefix = "tx" if action == "tarix" else "st"
+            buttons = [("📊 Hammasi", f"mod:vazifalar:{prefix}_all")]
+            buttons += [((u["name"] or str(u["tg_id"]))[:40],
+                         f"mod:vazifalar:{prefix}_u_{u['tg_id']}")
+                        for u in users.listing() if u["role"] != "owner"]
+            bot.send_message(chat_id,
+                             "Kim uchun?" if action == "hisobot"
+                             else "Kimning tarixi?",
+                             reply_markup=ui.buttons(buttons, row_width=1,
+                                                     back="mod:vazifalar:panel"))
+        elif action.startswith(("tx_", "st_")):
+            users.require_role(tg_id, "manager")
+            kind, _, raw = action.partition("_")
+            target = None if raw == "all" else int(raw.split("_")[-1])
+            name = "Barcha"
+            if target is not None:
+                u = users.get(target)
+                name = (u["name"] if u else None) or str(target)
+            if kind == "tx":
+                text = history_text(history_rows(target), name)
+            else:
+                text = stat_text(name, *stat_counts(target))
+            for chunk in ui.chunks(text):
+                bot.send_message(chat_id, chunk, parse_mode="HTML")
         elif action == "tekshiruv":
             _review_list(bot, chat_id, tg_id)
         elif action.startswith("kor_"):
@@ -570,7 +673,9 @@ def _panel(bot, chat_id, tg_id):
     if review:
         lines += ["", f"👀 Tekshirish kutilmoqda: {len(review)} ta"]
 
-    buttons = [("➕ Yangi vazifa", "mod:vazifalar:yangi")]
+    buttons = [("➕ Yangi vazifa", "mod:vazifalar:yangi"),
+               ("📋 Tarix", "mod:vazifalar:tarix"),
+               ("📊 Hisobot", "mod:vazifalar:hisobot")]
     if review:
         buttons.append((f"👀 Tekshirish ({len(review)})",
                         "mod:vazifalar:tekshiruv"))
