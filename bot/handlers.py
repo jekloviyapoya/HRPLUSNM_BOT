@@ -8,7 +8,7 @@ import functools
 import logging
 
 from . import (auth, config, ctx, db, license, licsrv, modules, onboarding,
-               sessions, settings_ui, tenant, tenants, ui, users)
+               sessions, settings_ui, stt, tenant, tenants, ui, users)
 from .modules import registry
 from .errors import BotError
 
@@ -982,6 +982,64 @@ def register(bot):
             text += f"\n\nℹ️ {notice['text']}"
         bot.send_message(message.chat.id, text,
                          reply_markup=ui.main_menu(message.from_user.id))
+
+    @bot.message_handler(content_types=["voice", "audio"])
+    @safe
+    def _voice(message):
+        """Ovoz → matn → odatiy oqim.
+
+        Muvaffaqiyatli o'girilgach xabar matnli qilib qayta ishlanadi —
+        vazifa matni, hisobot, izoh: qayerda matn kutilsa, o'sha yerga
+        tushadi. Diqqat: bu handler _seen ni chaqirmaydi — dedup xabar
+        matn bo'lib qayta ishlanganda bir marta bo'ladi.
+        """
+        tg_id = message.from_user.id
+        state, _ = sessions.get_global(tg_id)
+
+        if state and state.startswith("auth:"):
+            bot.send_message(message.chat.id,
+                             "Telefon va parolni yozib yuboring — "
+                             "ovozli xabar bu yerda qabul qilinmaydi.")
+            return
+        if not stt.enabled():
+            bot.send_message(message.chat.id,
+                             "Ovozli xabarlar hozircha o'chiq — matn yozing.")
+            return
+
+        media = message.voice or message.audio
+        if (getattr(media, "duration", 0) or 0) > stt.MAX_SECONDS:
+            bot.send_message(
+                message.chat.id,
+                f"Ovoz {stt.MAX_SECONDS // 60} daqiqadan oshmasin — "
+                "qisqaroq yuboring.")
+            return
+
+        note = bot.send_message(message.chat.id, "🎙 Tinglayapman…")
+        file_info = bot.get_file(media.file_id)
+        content = bot.download_file(file_info.file_path)
+        try:
+            text = stt.transcribe(content)
+        finally:
+            try:
+                bot.delete_message(message.chat.id, note.message_id)
+            except Exception:  # noqa: BLE001
+                pass
+
+        bot.send_message(message.chat.id, f"🎙 «{ui.escape(text)}»",
+                         parse_mode="HTML")
+        if state:
+            # Matn kutilayotgan bosqich bor — o'sha oqimga uzatamiz
+            message.content_type = "text"
+            message.text = text
+            message.voice = None
+            message.audio = None
+            bot.process_new_messages([message])
+        else:
+            bot.send_message(
+                message.chat.id,
+                "Bu matn bilan nima qilishni menyudan tanlang — masalan, "
+                "Vazifalar → Yangi vazifa, keyin ovozni qayta yuboring "
+                "yoki matnni nusxalang.")
 
     @bot.message_handler(content_types=["contact"])
     @safe

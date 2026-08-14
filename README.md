@@ -29,6 +29,7 @@ Tavsiya etiladi:
 | Kalit | Standart |
 |---|---|
 | `DB_PATH` | `/data/bot.db` |
+| `GROQ_API_KEY` | ovoz → matn (ixtiyoriy) |
 | `PUBLIC_URL` | Railway domeni |
 | `WEBAPP_SECRET` | tasodifiy uzun satr |
 | `TZ` | `Asia/Tashkent` |

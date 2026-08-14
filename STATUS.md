@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · takrorlanuvchi vazifalar
+> Oxirgi yangilanish: 2026-08-14 · ovoz → matn (Groq Whisper)
 >
 > **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
@@ -310,7 +310,15 @@ almashtirishi so'raladi. Keyin Sozlamalar → Hisob dan istalgan payt.
 - O'tkazib yuborilgan kunlar uchun BITTA davomchi (muddati kelajakka
   suriladi); parent_id tekshiruvi tufayli davomchi hech qachon ikkitalanmaydi
 
-**Testlar:** 413 ta, hammasi o'tadi.
+**Ovoz → matn** (`bot/stt.py`, Groq Whisper)
+- Ovozli xabar matnga o'giriladi va xuddi yozilgan xabarday joriy oqimga
+  qaytariladi: vazifa matni, muddat, hisobot, izoh — qayerda matn kutilsa
+- Auth bosqichlarida (telefon/parol) ovoz ATAYLAB rad etiladi
+- Sessiya yo'q bo'lsa — matn ko'rsatiladi, menyudan bo'lim tanlash taklifi
+- 120 soniyadan uzun ovoz rad etiladi; til avtomatik (o'zbek/rus)
+- Env: `GROQ_API_KEY` (bo'sh bo'lsa modul o'chiq, bot ishlayveradi)
+
+**Testlar:** 418 ta, hammasi o'tadi.
 
 ---
 
@@ -340,7 +348,6 @@ xodimga bitta.
 
 Yetishmayotgan qismlar (ehtiyoj paydo bo'lganda):
 - `POST /api/usage` — modul limitlari, BMP tomonida tayyor bo'lgach
-- Ovozli xabar → matn (market-botda Groq Whisper orqali edi)
 
 ---
 
