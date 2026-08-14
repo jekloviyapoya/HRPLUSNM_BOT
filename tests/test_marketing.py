@@ -231,3 +231,59 @@ def test_modul_reyestrda_bitosiz(env):
     assert registry.BY_KEY["marketing"].ready
     # Erkin matnli post Bito'siz ham yoziladi
     assert not modules.needs_bito("marketing")
+
+
+# --- oddiy post rejimi (market-bot c5d76f5 saboqi) ---
+
+def test_chegirmasiz_postda_aksiya_yozilmaydi(env):
+    """Mijoz chegirma kutib qolmasin."""
+    m = env["m"]
+    text = m.fallback_text("Coca-Cola 1L", None, 12000).lower()
+    assert "aksiya" not in text
+    assert "o'rniga" not in text
+    assert "12 000" in text
+    assert "narxi" in text
+
+
+def test_chegirmali_postda_ikkala_narx(env):
+    m = env["m"]
+    text = m.fallback_text("Coca-Cola 1L", 12000, 9000)
+    assert "12 000" in text and "9 000" in text
+    assert "o'rniga" in text
+
+
+def test_qimmatlashgan_narx_aksiya_emas(env):
+    m = env["m"]
+    text = m.fallback_text("Non", 5000, 7000).lower()
+    assert "o'rniga" not in text
+
+
+def test_promptda_chegirmasiz_rejim(env):
+    m = env["m"]
+    plain = m.compose("Non", None, 5000,
+                      session=ai_response("Yangi non keldi, mazali!"))
+    assert plain == "Yangi non keldi, mazali!"
+
+
+def test_promptda_chegirma_talqini(env):
+    """Prompt matnida rejim farqlanadi."""
+    m = env["m"]
+    calls = []
+
+    class Spy(FakeHTTP):
+        def post(self, url, headers=None, files=None, data=None, timeout=None,
+                 json=None):
+            calls.append(json["messages"][0]["content"][0]["text"])
+            return self.response
+
+    m.compose("Non", None, 5000,
+              session=Spy(Resp(200, {"content": [{"type": "text",
+                                                  "text": "matn"}],
+                                     "stop_reason": "end_turn"})))
+    assert "ISHLATMA" in calls[0]
+    calls.clear()
+    m.compose("Non", 9000, 5000,
+              session=Spy(Resp(200, {"content": [{"type": "text",
+                                                  "text": "matn"}],
+                                     "stop_reason": "end_turn"})))
+    assert "aksiya posti" in calls[0]

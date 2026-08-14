@@ -98,18 +98,53 @@ def test_kassa_royxat_korinishida(env):
 
 def test_qarzlar_ikki_tomonlama(env):
     m = env["m"]
-    client = Client(debt={"total": 5_000_000}, credit={"total": 8_000_000})
+    client = Client(debt={"total": 5_000_000},
+                    suppliers=[{"_id": "s1", "name": "Adler",
+                                "balance": -8_000_000}])
     got = m.debts(client)
     assert got["customers"] == 5_000_000
     assert got["suppliers"] == 8_000_000
 
 
+def test_fantom_qarz_hisoblanmaydi(env):
+    """Bito ro'yxatida yo'q firma to'langan hisoblanadi.
+
+    Qarz hisobotida o'chirilgan firmalar qolib ketadi va yo'q qarzni
+    ko'rsatadi. Ro'yxat haqiqiy manba.
+    """
+    m = env["m"]
+    client = Client(
+        debt={"total": 0},
+        credit={"total": 20_000_000},          # fantom qarz bor
+        suppliers=[{"_id": "s1", "name": "Adler", "balance": -3_000_000},
+                   {"_id": "s2", "name": "Nestle", "balance": 500_000}])
+    got = m.debts(client)
+    assert got["suppliers"] == 3_000_000       # 20 mln emas
+    assert got["phantom"] is False
+
+
+def test_royxat_olinmasa_hisobot_zaxira(env):
+    m = env["m"]
+    client = Client(debt={"total": 0}, credit={"total": 7_000_000},
+                    boom=["suppliers_boom"])
+
+    def boom(page=1, limit=200, search=None):
+        from bot.errors import BitoError
+        raise BitoError("nosozlik")
+
+    client.suppliers = boom
+    got = m.debts(client)
+    assert got["suppliers"] == 7_000_000
+    assert got["phantom"] is True
+
+
 def test_bir_hisobot_yiqilsa_qolgani_ishlaydi(env):
     m = env["m"]
-    client = Client(debt={"total": 5_000_000}, credit=None, boom=["credit"])
+    client = Client(debt=None, boom=["debt"],
+                    suppliers=[{"_id": "s1", "name": "A", "balance": -100}])
     got = m.debts(client)
-    assert got["customers"] == 5_000_000
-    assert got["suppliers"] == 0.0
+    assert got["customers"] == 0.0
+    assert got["suppliers"] == 100
 
 
 def test_ichma_ich_javobdan_son_topiladi(env):

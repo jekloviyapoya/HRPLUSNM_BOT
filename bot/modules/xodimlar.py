@@ -187,6 +187,52 @@ def check_in(tg_id, lat=None, lon=None):
     return record_of(tg_id, work_date), message
 
 
+def at_work(tg_id):
+    """Xodim AYNI PAYTDA ishdami?
+
+    ⚠️ «ketish qayd etilmagan» tekshiruvining o'zi YETARLI EMAS: xodim bir
+    kun «Ketdim» bosishni unutgan bo'lsa, o'sha eski yozuv uni abadiy
+    «ishda» ko'rsatardi. Shuning uchun FAQAT oxirgi yozuv olinadi va u
+    BUGUNGI bo'lishi ham shart.
+    """
+    row = db.row(
+        "SELECT work_date, came_at, left_at FROM attendance "
+        "WHERE tenant_id = ? AND tg_id = ? ORDER BY work_date DESC LIMIT 1",
+        (ctx.require(), tg_id),
+    )
+    if not row or not row["came_at"]:
+        return False
+    return not row["left_at"] and str(row["work_date"]) == str(today_local())
+
+
+def close_stale(before=None):
+    """Unutilgan ketishlarni yopadi: eski ochiq yozuv qolib ketmasin.
+
+    Ish vaqti oxiri bo'yicha yopiladi, jadval yo'q bo'lsa umuman
+    yopilmaydi — soxta ish soati yozilmasin.
+    """
+    before = str(before or today_local())
+    rows = db.rows(
+        "SELECT * FROM attendance WHERE tenant_id = ? AND came_at IS NOT NULL "
+        "AND left_at IS NULL AND work_date < ?",
+        (ctx.require(), before),
+    )
+    closed = []
+    for row in rows:
+        day = dt.date.fromisoformat(str(row["work_date"]))
+        shift = shift_for(row["tg_id"], day.weekday())
+        if not shift:
+            continue
+        db.run(
+            "UPDATE attendance SET left_at = ?, note = COALESCE(note, ?) "
+            "WHERE id = ?",
+            (f"{row['work_date']}T{shift['ends_at']}:00",
+             "Ketish qayd etilmagan — jadval bo'yicha yopildi", row["id"]),
+        )
+        closed.append(row["id"])
+    return closed
+
+
 def check_out(tg_id):
     now = now_local()
     row = record_of(tg_id, str(now.date()))
@@ -405,6 +451,7 @@ def _register(bot, guard):
         )
         bot.send_message(message.chat.id, text,
                          reply_markup=ui.main_menu(message.from_user.id))
+        deliver_tasks(bot, message.chat.id, message.from_user.id)
 
 
 def _attendance_screen(bot, chat_id, tg_id):
@@ -439,11 +486,40 @@ def _attendance_screen(bot, chat_id, tg_id):
                      reply_markup=ui.buttons(buttons, back="menu:root"))
 
 
+def deliver_tasks(bot, chat_id, tg_id):
+    """Ishga kelgan xodimga kutayotgan vazifalarni eslatadi.
+
+    Vazifa ish vaqtidan tashqarida berilgan bo'lsa xodim xabarni ko'rmay
+    qolishi mumkin — kelganda qayta ko'rsatiladi.
+    """
+    from . import vazifalar
+
+    try:
+        from .. import modules as _modules
+
+        if not _modules.enabled("vazifalar"):
+            return
+        rows = vazifalar.pending_for(tg_id)
+    except Exception:  # noqa: BLE001 — vazifalar moduli davomatni yiqitmasin
+        log.warning("Vazifalar olinmadi", exc_info=True)
+        return
+    if not rows:
+        return
+    lines = [f"📋 Sizda {len(rows)} ta ochiq vazifa bor:", ""]
+    for task in rows:
+        lines.append(f"• {ui.escape(task['title'])} — "
+                     f"{vazifalar.due_text(task)}")
+    bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML",
+                     reply_markup=ui.buttons(
+                         [("📋 Vazifalarim", "mod:vazifalar:menikilar")]))
+
+
 def _ask_location(bot, chat_id, tg_id):
     place = tenant.get_json("work_place")
     if not place:
         _, text = check_in(tg_id)
         bot.send_message(chat_id, text, reply_markup=ui.main_menu(tg_id))
+        deliver_tasks(bot, chat_id, tg_id)
         return
     sessions.set(tg_id, "xodimlar:keldim", {})
     from telebot import types

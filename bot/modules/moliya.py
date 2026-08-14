@@ -83,19 +83,36 @@ def cash_on_hand(client=None):
 
 
 def debts(client=None):
-    """Bizga qarzdorlar (mijozlar) va biz qarzdormiz (firmalar)."""
+    """Bizga qarzdorlar (mijozlar) va biz qarzdormiz (firmalar).
+
+    ⚠️ Firmalar qarzi hisobot summasidan EMAS, firmalar ro'yxatidan
+    yig'iladi. Sabab: qarz hisobotida Bito ro'yxatida endi mavjud
+    bo'lmagan firmalar ham qolib ketadi va «fantom qarz» ko'rsatadi.
+    Ro'yxatda yo'q firma to'langan hisoblanadi.
+
+    Ro'yxat olinmasa — hisobot summasi zaxira sifatida ishlatiladi.
+    """
     client = client or bito.client()
-    result = {"customers": 0.0, "suppliers": 0.0}
+    result = {"customers": 0.0, "suppliers": 0.0, "phantom": False}
     try:
         result["customers"] = _pick(client.debt_summary(),
                                     "total", "total_debt", "amount")
     except BitoError:
         log.warning("Mijoz qarzi olinmadi", exc_info=True)
+
     try:
-        result["suppliers"] = _pick(client.credit_summary(),
-                                    "total", "total_credit", "amount")
+        rows = suppliers_with_balance(client)
+        result["suppliers"] = sum(-row["balance"] for row in rows
+                                  if row["balance"] < 0)
     except BitoError:
-        log.warning("Firma qarzi olinmadi", exc_info=True)
+        log.warning("Firmalar ro'yxati olinmadi, hisobot summasi ishlatiladi",
+                    exc_info=True)
+        try:
+            result["suppliers"] = _pick(client.credit_summary(),
+                                        "total", "total_credit", "amount")
+            result["phantom"] = True
+        except BitoError:
+            log.warning("Firma qarzi olinmadi", exc_info=True)
     return result
 
 

@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `0a54585` + kirish
+> Oxirgi yangilanish: 2026-08-14 · commit `25b8d25` + market-bot tuzatishlari
 >
 > **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
@@ -249,7 +249,20 @@ almashtirishi so'raladi. Keyin Sozlamalar → Hisob dan istalgan payt.
 - Bot har safar parol yozilgan xabarni o'chirishni eslatadi
 - Xodimlar avvalgidek taklif kodi bilan kiradi — bu o'zgarmadi
 
-**Testlar:** 373 ta, hammasi o'tadi.
+**market-bot dan qabul qilingan tuzatishlar** (2026-08-13/14)
+- **Eski ochiq davomat yozuvi** xodimni abadiy «ishda» ko'rsatardi.
+  `at_work()` faqat oxirgi VA bugungi yozuvni oladi. `close_stale()`
+  unutilgan ketishlarni jadval oxiri bo'yicha yopadi (jadvalsiz kun
+  yopilmaydi — soxta ish soati yozilmasin)
+- **Fantom qarz**: qarz hisobotida o'chirilgan firmalar qolib ketadi.
+  Firmalar qarzi endi `supplier/get-paging` ro'yxatidan yig'iladi;
+  ro'yxat olinmasa hisobot zaxira sifatida ishlatiladi
+- **Vazifa ishga kelganda yetkaziladi** — ish vaqtidan tashqarida
+  berilgani ko'rinmay qolmasin
+- **Chegirmasiz post «aksiya» emas** — «chegirma», «arzon» so'zlari
+  ishlatilmaydi, faqat «Narxi»
+
+**Testlar:** 389 ta, hammasi o'tadi.
 
 ---
 

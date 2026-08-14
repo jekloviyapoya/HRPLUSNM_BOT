@@ -23,7 +23,9 @@ log = logging.getLogger(__name__)
 
 MAX_SEARCH = 8
 
-TEXT_PROMPT = """Do'kon uchun Telegram kanaliga aksiya posti yoz.
+# Chegirma bo'lmasa post «aksiya» emas — oddiy e'lon. Aks holda mijoz
+# chegirma kutadi va narxni ko'rib xafa bo'ladi.
+TEXT_PROMPT = """Do'kon uchun Telegram kanaliga {kind} yoz.
 
 Mahsulot: {name}
 {price_line}
@@ -34,6 +36,7 @@ Qoidalar:
 - 3–5 qator, qisqa va jonli
 - Boshida diqqatni tortadigan bir qator
 - Narx aytilgan bo'lsa uni aniq ko'rsat
+- {tone}
 - Oxirida qisqa chaqiriq
 - Emoji ishlat, lekin 4 tadan ko'p emas
 - Markdown yoki ** ishlatma, oddiy matn
@@ -96,8 +99,13 @@ def price_line(old, new):
 
 def compose(name, old=None, new=None, session=None):
     """AI post matnini yozadi. Xato bo'lsa oddiy zaxira matn."""
+    sale = bool(old and new and new < old)
     prompt = TEXT_PROMPT.format(
-        name=name, shop=tenant.shop_name(), price_line=price_line(old, new))
+        name=name, shop=tenant.shop_name(), price_line=price_line(old, new),
+        kind="aksiya posti" if sale else "oddiy mahsulot posti",
+        tone=("Chegirmani ta'kidla" if sale else
+              "Chegirma YO'Q — «aksiya», «chegirma», «arzon» kabi so'zlarni "
+              "ISHLATMA, shunchaki mahsulot va narxini e'lon qil"))
     try:
         text, _ = ai.ask([{"type": "text", "text": prompt}], max_tokens=600,
                          session=session)
@@ -110,13 +118,18 @@ def compose(name, old=None, new=None, session=None):
 
 
 def fallback_text(name, old=None, new=None):
-    """AI ishlamasa ham post chiqsin."""
-    lines = [f"🔥 {name}"]
-    if old and new:
+    """AI ishlamasa ham post chiqsin.
+
+    Chegirmasiz postda «aksiya» belgisi ishlatilmaydi — mijoz chegirma
+    kutib qolmasin.
+    """
+    sale = bool(old and new and new < old)
+    lines = [f"{'🔥' if sale else '🆕'} {name}"]
+    if sale:
         lines.append(f"{old:,.0f} so'm o'rniga {new:,.0f} so'm"
                      .replace(",", " "))
     elif new:
-        lines.append(f"{new:,.0f} so'm".replace(",", " "))
+        lines.append(f"Narxi: {new:,.0f} so'm".replace(",", " "))
     lines.append(f"{tenant.shop_name()} — kutamiz!")
     return "\n".join(lines)
 

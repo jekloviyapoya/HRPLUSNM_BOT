@@ -225,6 +225,20 @@ def mark_late(task_id):
     return task
 
 
+def pending_for(tg_id):
+    """Xodim ishga kelganda yetkaziladigan vazifalar.
+
+    Vazifa xodim ish vaqtidan tashqarida berilgan bo'lsa, u xabarni
+    ko'rmay qolishi mumkin. Kelganda qayta eslatiladi.
+    """
+    return db.rows(
+        "SELECT * FROM task WHERE tenant_id = ? AND status IN ('yangi', "
+        "  'qaytarildi') AND (assigned_to = ? OR assigned_to IS NULL) "
+        "ORDER BY due_at IS NULL, due_at LIMIT 10",
+        (ctx.require(), tg_id),
+    )
+
+
 def stats(tg_id=None, period=None):
     period = period or f"{xodimlar.today_local():%Y-%m}"
     where = "tenant_id = ? AND created_at LIKE ?"

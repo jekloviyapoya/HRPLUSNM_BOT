@@ -146,6 +146,36 @@ Faqat `users.role = 'fired'` qo'yiladi. Tarix saqlanadi.
 
 ---
 
+## 4b. Keyingi tuzatishlar (2026-08-13/14)
+
+### 4b.1 Eski ochiq davomat yozuvi
+
+`WHERE checkout_time IS NULL` tekshiruvining o'zi yetarli emas. Xodim bir
+kun «Ketdim» bosishni unutsa, o'sha yozuv uni **abadiy «ishda»**
+ko'rsatardi.
+
+To'g'ri yo'l: faqat **oxirgi** yozuv olinadi va u **bugungi** bo'lishi ham
+shart. Qo'shimcha: eski ochiq yozuvlar jadval oxiri bo'yicha yopiladi,
+jadval yo'q bo'lsa umuman yopilmaydi — soxta ish soati yozilmasin.
+
+### 4b.2 Fantom qarz
+
+Qarz hisobotida Bito ro'yxatida endi mavjud bo'lmagan firmalar qolib
+ketadi va yo'q qarzni ko'rsatadi. **Ro'yxatda yo'q firma to'langan
+hisoblanadi** — qarz summasi hisobotdan emas, `supplier/get-paging`
+ro'yxatidan yig'iladi.
+
+### 4b.3 Vazifa ishga kelganda yetkaziladi
+
+Ish vaqtidan tashqarida berilgan vazifani xodim ko'rmay qolishi mumkin.
+Kelish qayd etilganda ochiq vazifalar qayta eslatiladi.
+
+### 4b.4 Chegirmasiz post «aksiya» emas
+
+Chegirma bo'lmasa postda «AKSIYA», «chegirma», «arzon» so'zlari
+ishlatilmaydi — faqat «Narxi». Aks holda mijoz chegirma kutadi va narxni
+ko'rib xafa bo'ladi.
+
 ## 5. HRPLUSNM uchun xulosa
 
 `nakladnoy` modulini yozishda:

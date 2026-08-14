@@ -234,3 +234,36 @@ def test_modul_reyestrda_bitosiz(env):
     modules = importlib.import_module("bot.modules")
     assert registry.BY_KEY["vazifalar"].ready
     assert not modules.needs_bito("vazifalar")
+
+
+# --- ishga kelganda yetkazish (market-bot 1ac6fd9 saboqi) ---
+
+def test_ochiq_vazifalar_yetkazish_uchun(env):
+    """Ish vaqtidan tashqarida berilgan vazifa ko'rinmay qolmasin."""
+    v = env["v"]
+    a = v.create("Ertalabki ish", created_by=30, assigned_to=20)
+    v.create("Umumiy ish", created_by=30)
+    done = v.create("Bajarilgan", created_by=30, assigned_to=20)
+    v.report(done, 20)
+    v.approve(done, 30)
+
+    rows = v.pending_for(20)
+    titles = [r["title"] for r in rows]
+    assert "Ertalabki ish" in titles
+    assert "Umumiy ish" in titles          # hammaga berilgani ham
+    assert "Bajarilgan" not in titles
+    del a
+
+
+def test_qaytarilgan_vazifa_ham_yetkaziladi(env):
+    v = env["v"]
+    task_id = v.create("Qaytarilgan", created_by=30, assigned_to=20)
+    v.report(task_id, 20)
+    v.reject(task_id, 30, "Qayta qiling")
+    assert "Qaytarilgan" in [r["title"] for r in v.pending_for(20)]
+
+
+def test_boshqa_xodim_vazifasi_yetkazilmaydi(env):
+    v = env["v"]
+    v.create("Valining ishi", created_by=30, assigned_to=21)
+    assert v.pending_for(20) == []

@@ -284,3 +284,64 @@ def test_menyu_rolga_qarab(env):
     impl = registry.BY_KEY["xodimlar"].impl
     assert len(impl.menu("owner")) == 2
     assert len(impl.menu("staff")) == 1
+
+
+# --- unutilgan ketish (market-bot e1e9ec9 saboqi) ---
+
+def test_eski_ochiq_yozuv_abadiy_ishda_korsatmaydi(env, monkeypatch):
+    """Xodim «Ketdim» bosishni unutsa, ertasi kuni ham ishda ko'rinardi."""
+    x = env["x"]
+    x.set_shift(501, 0, "09:00", "18:00")
+    _freeze(x, monkeypatch, 9)
+    x.check_in(501)
+    assert x.at_work(501) is True          # bugun, ochiq
+
+    _freeze(x, monkeypatch, 9, weekday=1)  # ertasi kun
+    assert x.at_work(501) is False         # eski yozuv hisoblanmaydi
+
+
+def test_kelmagan_odam_ishda_emas(env, monkeypatch):
+    x = env["x"]
+    _freeze(x, monkeypatch, 9)
+    assert x.at_work(501) is False
+
+
+def test_ketgan_odam_ishda_emas(env, monkeypatch):
+    x = env["x"]
+    x.set_shift(501, 0, "09:00", "18:00")
+    _freeze(x, monkeypatch, 9)
+    x.check_in(501)
+    _freeze(x, monkeypatch, 18)
+    x.check_out(501)
+    assert x.at_work(501) is False
+
+
+def test_unutilgan_ketish_jadval_boyicha_yopiladi(env, monkeypatch):
+    x = env["x"]
+    x.set_shift(501, 0, "09:00", "18:00")
+    _freeze(x, monkeypatch, 9)
+    x.check_in(501)
+    _freeze(x, monkeypatch, 9, weekday=1)
+    closed = x.close_stale()
+    assert len(closed) == 1
+    row = x.record_of(501, "2026-08-17")
+    assert row["left_at"].endswith("18:00:00")
+    assert "qayd etilmagan" in row["note"]
+
+
+def test_jadvalsiz_kun_yopilmaydi(env, monkeypatch):
+    """Soxta ish soati yozilmasin."""
+    x = env["x"]
+    _freeze(x, monkeypatch, 14)
+    x.check_in(501)                        # jadvalsiz kun
+    _freeze(x, monkeypatch, 9, weekday=1)
+    assert x.close_stale() == []
+    assert x.record_of(501, "2026-08-17")["left_at"] is None
+
+
+def test_bugungi_ochiq_yozuv_yopilmaydi(env, monkeypatch):
+    x = env["x"]
+    x.set_shift(501, 0, "09:00", "18:00")
+    _freeze(x, monkeypatch, 9)
+    x.check_in(501)
+    assert x.close_stale() == []
