@@ -107,6 +107,9 @@ Keyingisi — modullar: Ombor, Nakladnoy, Moliya, Vazifalar, Marketing.
 | Buyruq | Kim |
 |---|---|
 | `/start`, `/menu`, `/build` | hamma |
+| `/new_client <tel> [nom]` | sotuvchi |
+| `/set_bito <id> <kalit>` | sotuvchi |
+| `/reset_password <id>` | sotuvchi |
 | `/saas` | sotuvchi |
 | `/set_license <biznes_id> YYYY-MM-DD [tarif]` | sotuvchi |
 | `/saas_msg <matn>` | sotuvchi |

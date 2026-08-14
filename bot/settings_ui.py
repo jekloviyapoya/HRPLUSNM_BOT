@@ -11,7 +11,7 @@ import logging
 
 from telebot import types
 
-from . import bito, catalog, ctx, db, sessions, tenant, ui, users
+from . import auth, bito, catalog, ctx, db, sessions, tenant, ui, users
 from .errors import BotError
 from .modules import xodimlar
 
@@ -22,6 +22,7 @@ SECTIONS = [
     ("bito", "🔗 Bito ulanishi", "Kalit, tashkilot, ombor, narx-ro'yxati"),
     ("xodimlar", "👥 Xodimlar", "Rol, ish jadvali, stavka"),
     ("ombor", "📦 Ombor", "Kam qolgan chegarasi"),
+    ("hisob", "🔑 Hisob", "Parolni o'zgartirish"),
 ]
 
 
@@ -206,6 +207,23 @@ def ombor_panel(bot, chat_id, tg_id):
                          row_width=1, back="menu:sozlamalar"))
 
 
+# -------------------------------------------------------------------- hisob
+
+
+def hisob(bot, chat_id, tg_id):
+    users.require_role(tg_id, "owner")
+    row = auth.account(ctx.require())
+    lines = ["<b>Hisob</b>", ""]
+    lines.append(f"Telefon (login): {_label(row['phone'] if row else None)}")
+    lines.append("Parol: ●●●●●●●●")
+    lines += ["", "Parolni unutsangiz sotuvchiga murojaat qiling — u yangi "
+                  "parol beradi."]
+    bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML",
+                     reply_markup=ui.buttons(
+                         [("🔑 Parolni o'zgartirish", "set:hisob:parol")],
+                         row_width=1, back="menu:sozlamalar"))
+
+
 # ---------------------------------------------------------------- handlerlar
 
 
@@ -230,6 +248,16 @@ def register(bot, safe):
             _staff_click(bot, chat_id, tg_id, parts)
         elif section == "ombor":
             _ombor_click(bot, chat_id, tg_id, parts)
+        elif section == "hisob":
+            if len(parts) == 2:
+                hisob(bot, chat_id, tg_id)
+            elif parts[2] == "parol":
+                users.require_role(tg_id, "owner")
+                sessions.set(tg_id, "set:hisob:parol", {})
+                bot.send_message(
+                    chat_id,
+                    f"Yangi parolni yozing (kamida {auth.MIN_LENGTH} ta "
+                    "belgi).\n\n⚠️ Yuborgach xabarni o'chirib tashlang.")
 
     @bot.message_handler(
         func=lambda m: (sessions.get_global(m.from_user.id)[0] or "")
@@ -482,6 +510,16 @@ def _apply(bot, message, state, data):
             xodimlar.set_salary(target, per_day=_number(text, "Stavka"))
             bot.send_message(chat_id, "Kunlik stavka saqlandi.")
         staff_card(bot, chat_id, tg_id, target)
+        return
+
+    if section == "hisob" and parts[2] == "parol":
+        users.require_role(tg_id, "owner")
+        auth.set_password(ctx.require(), text)
+        bot.send_message(
+            chat_id,
+            "✅ Parol o'zgartirildi. Eski parol endi ishlamaydi.\n"
+            "Bu xabarni ham o'chirib tashlang.")
+        hisob(bot, chat_id, tg_id)
         return
 
     if section == "ombor" and parts[2] == "chegara":

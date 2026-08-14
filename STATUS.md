@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `ee3173e` + mijoz
+> Oxirgi yangilanish: 2026-08-14 · commit `0a54585` + kirish
 >
 > **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
@@ -233,7 +233,23 @@ Bir hisobot yiqilsa qolgani ishlaydi.
   aloqa kerak bo'lsa telefonni o'zi qoldiradi
 - Statistika: o'rtacha ball va yulduzlar bo'yicha taqsimot
 
-**Testlar:** 352 ta, hammasi o'tadi.
+**Kirish modeli** (`bot/auth.py`, migratsiya `015`)
+Mijoz **o'zi biznes ocholmaydi**. Sotuvchi hisob yaratadi:
+- `/new_client +998901234567 [nom]` → telefon va parol chiqadi
+- `/set_bito <id> <kalit>` → Bito ulanadi, tashkilot/ombor/narx avtomatik
+  tanlanadi (yagona variant bo'lsa)
+- `/reset_password <id>` → parol unutilganda
+
+Mijoz botga telefon + parol bilan kiradi va birinchi kirishda parolni
+almashtirishi so'raladi. Keyin Sozlamalar → Hisob dan istalgan payt.
+
+- **Parol xeshlangan** (`pbkdf2`, 200 000 iteratsiya, tasodifiy tuz).
+  Ochiq matnda hech qayerda saqlanmaydi
+- 5 marta noto'g'ri urinishdan keyin 15 daqiqaga blok
+- Bot har safar parol yozilgan xabarni o'chirishni eslatadi
+- Xodimlar avvalgidek taklif kodi bilan kiradi — bu o'zgarmadi
+
+**Testlar:** 373 ta, hammasi o'tadi.
 
 ---
 

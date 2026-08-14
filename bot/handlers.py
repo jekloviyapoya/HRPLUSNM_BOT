@@ -7,8 +7,8 @@ aniqlab, ctx ga qo'yish. Busiz hech bir so'rov bajarilmaydi.
 import functools
 import logging
 
-from . import (config, ctx, db, license, modules, onboarding, sessions,
-               settings_ui, tenant, tenants, ui, users)
+from . import (auth, config, ctx, db, license, modules, onboarding,
+               sessions, settings_ui, tenant, tenants, ui, users)
 from .modules import registry
 from .errors import BotError
 
@@ -107,11 +107,13 @@ def register(bot):
             bot.send_message(
                 message.chat.id,
                 "Salom! Bu — do'kon boshqaruv boti.\n\n"
-                "Nima qilamiz?",
+                "Do'kon egasi bo'lsangiz — sotuvchi bergan telefon va parol "
+                "bilan kiring.\nXodim bo'lsangiz — egangiz bergan taklif "
+                "kodini yuboring.",
                 reply_markup=ui.buttons(
                     [
-                        ("🏪 Yangi biznes ochish", "join:new"),
-                        ("👥 Jamoaga qo'shilish", "join:code"),
+                        ("🔑 Kirish (telefon + parol)", "join:login"),
+                        ("👥 Taklif kodi bilan", "join:code"),
                     ],
                     row_width=1,
                 ),
@@ -187,6 +189,42 @@ def register(bot):
             except Exception:  # noqa: BLE001
                 log.warning("Past baho xabari ketmadi: %s", target,
                             exc_info=True)
+
+    def _do_login(message, phone):
+        tg_id = message.from_user.id
+        sessions.clear(tg_id)
+        tenant_id, must_change = auth.login(tg_id, phone, message.text or "")
+        auth.bind_owner(
+            tenant_id, tg_id,
+            name=(message.from_user.first_name or "").strip() or None,
+            username=message.from_user.username)
+        ctx.set(tenant_id)
+
+        bot.send_message(
+            message.chat.id,
+            f"✅ Kirdingiz: <b>{ui.escape(tenant.shop_name())}</b>\n\n"
+            "Parol yozilgan xabarni o'chirib tashlashni unutmang.",
+            parse_mode="HTML")
+
+        if must_change:
+            sessions.set(tg_id, "auth:yangi_parol", {})
+            bot.send_message(
+                message.chat.id,
+                "Xavfsizlik uchun yangi parol o'ylang va yuboring "
+                f"(kamida {auth.MIN_LENGTH} ta belgi).")
+            return
+        _greet(message)
+
+    def _change_password(message):
+        tg_id = message.from_user.id
+        sessions.clear(tg_id)
+        users.require_role(tg_id, "owner")
+        auth.set_password(ctx.require(), (message.text or "").strip())
+        bot.send_message(
+            message.chat.id,
+            "✅ Parol o'zgartirildi. Eski parol endi ishlamaydi.\n"
+            "Bu xabarni ham o'chirib tashlang.",
+            reply_markup=ui.main_menu(tg_id))
 
     def _apply_to_job(message, raw_id):
         """Nomzod vakansiya havolasi orqali kirdi."""
@@ -319,14 +357,13 @@ def register(bot):
                              "Siz allaqachon bir biznesdasiz.")
             return
 
-        if call.data == "join:new":
-            tenant_id = tenants.create(
-                tg_id,
-                name=(call.from_user.first_name or "").strip() or None,
-                username=call.from_user.username,
-            )
-            ctx.set(tenant_id)
-            onboarding.start(bot, call.message, tg_id)
+        if call.data == "join:login":
+            sessions.set(tg_id, "auth:telefon", {})
+            bot.send_message(
+                call.message.chat.id,
+                "Telefon raqamingizni yuboring.\n"
+                "Masalan: <code>+998901234567</code>",
+                parse_mode="HTML")
             return
 
         if call.data == "join:code":
@@ -405,6 +442,96 @@ def register(bot):
                 bot.send_message(owner, f"✅ Obuna {date} gacha uzaytirildi.")
             except Exception:  # noqa: BLE001
                 log.warning("Egaga xabar ketmadi: %s", owner, exc_info=True)
+
+    @bot.message_handler(commands=["new_client"])
+    @safe
+    def _new_client(message):
+        if not users.is_seller(message.from_user.id):
+            return
+        parts = (message.text or "").split(maxsplit=2)
+        if len(parts) < 2:
+            bot.send_message(
+                message.chat.id,
+                "Ishlatilishi: /new_client +998901234567 [do'kon nomi]")
+            return
+        name = parts[2] if len(parts) > 2 else None
+        tenant_id, password = auth.create_account(parts[1], name=name)
+        bot.send_message(
+            message.chat.id,
+            f"✅ Hisob ochildi — #{tenant_id}\n\n"
+            f"Telefon: <code>{ui.escape(auth.normalize_phone(parts[1]))}</code>\n"
+            f"Parol: <code>{ui.escape(password)}</code>\n\n"
+            "Shu ikkisini mijozga bering. U birinchi kirishda parolni "
+            "o'zgartirishi so'raladi.\n\n"
+            f"Bito kalitini kiritish: <code>/set_bito {tenant_id} KALIT</code>",
+            parse_mode="HTML")
+
+    @bot.message_handler(commands=["reset_password"])
+    @safe
+    def _reset_password(message):
+        if not users.is_seller(message.from_user.id):
+            return
+        parts = (message.text or "").split()
+        if len(parts) < 2:
+            bot.send_message(message.chat.id,
+                             "Ishlatilishi: /reset_password <biznes_id>")
+            return
+        tenant_id = int(parts[1])
+        password = auth.reset_password(tenant_id)
+        bot.send_message(
+            message.chat.id,
+            f"#{tenant_id} uchun yangi parol: <code>{ui.escape(password)}</code>\n"
+            "Mijoz birinchi kirishda uni o'zgartirishi so'raladi.",
+            parse_mode="HTML")
+
+    @bot.message_handler(commands=["set_bito"])
+    @safe
+    def _set_bito(message):
+        if not users.is_seller(message.from_user.id):
+            return
+        parts = (message.text or "").split()
+        if len(parts) < 3:
+            bot.send_message(message.chat.id,
+                             "Ishlatilishi: /set_bito <biznes_id> <kalit>")
+            return
+        tenant_id, key = int(parts[1]), parts[2]
+        bot.send_message(message.chat.id, "Kalit tekshirilmoqda…")
+        from . import bito
+
+        probe = bito.Bito(api_key=key)
+        profile, scheme = probe.verify()
+        with ctx.scope(tenant_id):
+            tenant.set("bito_api_key", key)
+            tenant.set("bito_auth_scheme", scheme)
+            client = bito.client()
+            orgs = client.organizations()
+            if len(orgs) == 1:
+                tenant.set("bito_org_id", orgs[0]["id"])
+                tenant.set("bito_org_name", orgs[0].get("name"))
+                warehouses = client.warehouses(organization_id=orgs[0]["id"])
+                if len(warehouses) == 1:
+                    tenant.set("warehouse_id", warehouses[0]["id"])
+                    tenant.set("warehouse_name", warehouses[0].get("name"))
+                prices = client.prices()
+                chosen = bito.pick_default(prices, "is_main", "is_default")
+                if chosen:
+                    tenant.set("price_id", chosen["id"])
+                    tenant.set("price_name", chosen.get("name"))
+                    if chosen.get("currency_id"):
+                        tenant.set("currency_id", chosen["currency_id"])
+            missing = tenant.missing(modules.BITO_KEYS)
+            shop = tenant.shop_name()
+
+        company = profile.get("company_name") or profile.get("full_name") or ""
+        text = (f"✅ #{tenant_id} {ui.escape(shop)} — Bito ulandi\n"
+                f"Hisob: {ui.escape(str(company))}")
+        if missing:
+            text += ("\n\n⚠️ To'ldirilmagan: " + ", ".join(missing)
+                     + "\nMijoz Sozlamalar → Bito ulanishi dan tanlaydi.")
+        bot.send_message(message.chat.id, text, parse_mode="HTML")
+        bot.send_message(
+            message.chat.id,
+            "Kalit yozilgan xabaringizni o'chirib tashlang.")
 
     @bot.message_handler(commands=["set_modules"])
     @safe
@@ -670,6 +797,23 @@ def register(bot):
             return
         tg_id = message.from_user.id
         state, _ = sessions.get_global(tg_id)
+
+        if state == "auth:telefon":
+            sessions.set(tg_id, "auth:parol", {"phone": message.text or ""})
+            bot.send_message(
+                message.chat.id,
+                "Endi parolni yuboring.\n\n"
+                "⚠️ Yuborgach xabaringizni o'chirib tashlang — parol "
+                "Telegram tarixida qolib ketmasin.")
+            return
+
+        if state == "auth:parol":
+            _do_login(message, sessions.get_global(tg_id)[1].get("phone"))
+            return
+
+        if state == "auth:yangi_parol":
+            _change_password(message)
+            return
 
         if state == "join:code":
             _do_join(message, message.text or "")

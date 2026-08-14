@@ -178,4 +178,4 @@ def test_ishdan_boshatilgan_royxatda_yoq(env):
 
 def test_bolimlar_royxati_toliq(env):
     keys = {key for key, _, _ in env["s"].SECTIONS}
-    assert keys == {"dokon", "bito", "xodimlar", "ombor"}
+    assert keys == {"dokon", "bito", "xodimlar", "ombor", "hisob"}
