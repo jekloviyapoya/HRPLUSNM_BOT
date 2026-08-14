@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `d4f85ce` + nakladnoy to'liq
+> Oxirgi yangilanish: 2026-08-14 · commit `ac661a4` + vazifalar
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -150,7 +150,17 @@ Modul emas — har doim ochiq. To'rt bo'lim:
 Ishdan bo'shatishda hech narsa o'chirilmaydi — `users.active = 0`, davomat
 va ish haqi tarixi saqlanadi.
 
-**Testlar:** 214 ta, hammasi o'tadi.
+**`vazifalar` moduli** (`bot/modules/vazifalar.py`, migratsiya `009`)
+- Oqim: menejer beradi → xodim qabul qiladi va hisobot yuboradi →
+  menejer tasdiqlaydi yoki sabab bilan qaytaradi
+- **Ball faqat tasdiqlangach beriladi.** Xodim o'zi «bajardim» desa ball
+  yo'q — aks holda hisob ma'nosini yo'qotadi
+- Muddat matndan o'qiladi: «bugun 18:00», «ertaga», «3 kun», sana
+- Muddati o'tgani uchun ball **bir marta** ayiriladi (`late` bayrog'i)
+- Hammaga berilgan vazifani kim qabul qilsa — o'shanga biriktiriladi
+- Ballar `xodimlar` moduliga yoziladi, ikkinchi hisob yuritilmaydi
+
+**Testlar:** 234 ta, hammasi o'tadi.
 
 ---
 
@@ -159,7 +169,7 @@ va ish haqi tarixi saqlanadi.
 | Kalit | Katalogda | Yozilgan |
 |---|---|---|
 | `xodimlar` | ✅ | ✅ |
-| `vazifalar` | ✅ | ❌ keyingi ish |
+| `vazifalar` | ✅ | ✅ |
 | `hr` | ✅ | ❌ |
 | `ombor` | ✅ | ✅ |
 | `ombor_ai` | ✅ | ❌ |
@@ -176,15 +186,15 @@ xodimga bitta.
 
 ## Keyingi qadam
 
-**`vazifalar` moduli** — Bito talab qilmaydi, xodimlar bilan bog'lanadi.
+**`moliya` moduli** — pul taqvimi, qarzlar, zakaz limiti. Bito talab qiladi.
 
 Nakladnoyda hali yo'q: katalogda topilmagan mahsulotni **Bito'da yangi
 yaratish** (hozircha faqat tashlab ketiladi). `PUT product/update` da
 `custom_fields` qaytarilishi shart — aks holda PLU o'chadi
 (`LESSONS-MARKET-BOT.md` §2.3).
 
-Undan keyingi tartib: `ombor_ai` → `inventarizatsiya` → `moliya` →
-`marketing` → `vazifalar` → `hr` → `mijoz`.
+Undan keyingi tartib: `marketing` → `inventarizatsiya` → `ombor_ai` →
+`hr` → `mijoz`.
 
 **Sozlamalarda hali yo'q** (xodimlar moduli uchun kerak): ish joyi
 lokatsiyasi, radius, jadval qo'yish oynasi, stavka belgilash, ball berish.
