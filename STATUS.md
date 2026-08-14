@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `ce9941e` + saboqlar
+> Oxirgi yangilanish: 2026-08-14 · commit `71f5f01` + nakladnoy (1-qism)
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -100,7 +100,23 @@
   hujjatda ixtiyoriy deb yozilgan bo'lsa ham (400 qaytaradi)
 - So'rov usuli (GET/POST) noma'lum — ikkalasi sinaladi, ishlagani keshlanadi
 
-**Testlar:** 129 ta, hammasi o'tadi.
+**`nakladnoy` moduli — 1-qism** (`bot/modules/nakladnoy.py`, migratsiya `007`)
+- Rasm / PDF / Excel qabul qiladi, AI o'qiydi, tekshirish ekranini beradi
+- **Bito'ga hech narsa yozmaydi** — moslashtirish va kirim 2-qismda
+- `bot/ai.py`: Anthropic klienti. Javob kesilsa **yuqoriga** qarab qayta
+  urinadi (pastga urinish battar kesadi), 529/503 da qayta uriniladi
+- `nak_prompt.py`: ekstraksiya qoidalari market-bot'dan olingan va test
+  bilan qo'riqlanadi (`test_prompt_qoidalari_joyida`)
+- Firma tuzilishi xotirasi: har firmaning ustunlari o'rganilib, keyingi
+  hujjatlarda AI'ga eslatma sifatida beriladi
+- Hujjatdagi jami bilan solishtirish: farq 1% dan oshsa ogohlantiradi
+
+**INVARIANT — buzilmasin:** `qty` = blok soni, `price` = bitta dona narxi,
+jami = `qty × block_size × price`. market-bot'da bu buzilib, Bito'ga olti
+barobar ortiq yuklangan edi. `line_total()` — yagona hisoblash joyi,
+oltita test qo'riqlaydi.
+
+**Testlar:** 155 ta, hammasi o'tadi.
 
 ---
 
@@ -113,7 +129,7 @@
 | `hr` | ✅ | ❌ |
 | `ombor` | ✅ | ✅ |
 | `ombor_ai` | ✅ | ❌ |
-| `nakladnoy` | ✅ | ❌ |
+| `nakladnoy` | ✅ | ⚠️ 1-qism |
 | `inventarizatsiya` | ✅ | ❌ |
 | `moliya` | ✅ | ❌ |
 | `marketing` | ✅ | ❌ |
@@ -126,8 +142,15 @@ xodimga bitta.
 
 ## Keyingi qadam
 
-**`nakladnoy` moduli** — market-bot funksiyalarini ko'chirish davomi.
-Rasm/PDF → AI o'qish → Bito'ga kirim.
+**`nakladnoy` 2-qism** — mahsulotlarni Bito katalogiga moslashtirish va
+kirim yaratish. Eng xavfli qism: Bito'ga yozadi.
+
+Kerak bo'ladi:
+- Nom bo'yicha moslashtirish (shtrix-kod → aniq nom → AI yordami)
+- Topilmaganlar uchun yangi mahsulot yaratish yoki tashlab ketish
+- `purchase` yaratish; `PUT product/update` da `custom_fields` qaytarilishi
+  (aks holda PLU o'chadi — `LESSONS-MARKET-BOT.md` §2.3)
+- Takroriy yuklashdan himoya (idempotentlik)
 
 Undan keyingi tartib: `ombor_ai` → `inventarizatsiya` → `moliya` →
 `marketing` → `vazifalar` → `hr` → `mijoz`.
