@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `71f5f01` + nakladnoy (1-qism)
+> Oxirgi yangilanish: 2026-08-14 · commit `84ad4c6` + moslashtirish
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -116,7 +116,19 @@ jami = `qty × block_size × price`. market-bot'da bu buzilib, Bito'ga olti
 barobar ortiq yuklangan edi. `line_total()` — yagona hisoblash joyi,
 oltita test qo'riqlaydi.
 
-**Testlar:** 155 ta, hammasi o'tadi.
+**Katalog keshi va moslashtirish** (`bot/catalog.py`, migratsiya `008`)
+- Ombor skaneri hamma sahifani varaqlaganda **katalog ham to'ldiriladi** —
+  ikkinchi marta varaqlash kerak emas
+- Moslashtirish tartibi: xotira → shtrix-kod → SKU → aniq nom →
+  so'z ustma-ustligi
+- **Ikkilanishda taxmin qilinmaydi.** Ikki mahsulot yaqin ball olsa,
+  nomzodlar foydalanuvchiga ko'rsatiladi. Noto'g'ri moslashtirish ombor
+  qoldig'ini buzadi va uni qo'lda tuzatish og'ir
+- Xotira: foydalanuvchi bir marta tanlagan mos kelish keyingi
+  nakladnoylarda avtomatik qo'llanadi (`nak_alias`)
+- Defis bo'shliqqa aylanadi: «Coca-Cola» va «Coca Cola» bir-birini topsin
+
+**Testlar:** 173 ta, hammasi o'tadi.
 
 ---
 
@@ -145,8 +157,8 @@ xodimga bitta.
 **`nakladnoy` 2-qism** — mahsulotlarni Bito katalogiga moslashtirish va
 kirim yaratish. Eng xavfli qism: Bito'ga yozadi.
 
-Kerak bo'ladi:
-- Nom bo'yicha moslashtirish (shtrix-kod → aniq nom → AI yordami)
+Moslashtirish **tayyor** (`bot/catalog.py`). Qolgani:
+- Moslashtirish ekrani: nomzodlardan tanlash, xotiraga yozish
 - Topilmaganlar uchun yangi mahsulot yaratish yoki tashlab ketish
 - `purchase` yaratish; `PUT product/update` da `custom_fields` qaytarilishi
   (aks holda PLU o'chadi — `LESSONS-MARKET-BOT.md` §2.3)

@@ -19,7 +19,7 @@ Aks holda 11 000 ta mahsulotning yarmi «kam qolgan» bo'lib chiqadi.
 import logging
 
 from . import base, registry
-from .. import bito, ctx, db, sessions, tenant, ui, users
+from .. import bito, catalog, ctx, db, sessions, tenant, ui, users
 from ..errors import BitoError, BotError
 
 log = logging.getLogger(__name__)
@@ -150,6 +150,11 @@ def scan(client=None, max_pages=MAX_PAGES):
             if not rows:
                 break
             for product in rows:
+                # Katalog keshi ayni shu o'tishda to'ldiriladi — nakladnoy
+                # moslashtirishi uchun. Ikkinchi marta varaqlash kerak emas.
+                product["_amount"] = amount_of(product)
+                catalog.upsert(product)
+
                 status = status_of(product)
                 if not status:
                     continue
@@ -200,7 +205,7 @@ def scan(client=None, max_pages=MAX_PAGES):
         (total, low, out, page, tid),
     )
     return {"total": total, "low": low, "out": out, "pages": page,
-            "truncated": page > max_pages}
+            "truncated": page > max_pages, "catalog": catalog.size()}
 
 
 def low_items(status=None, limit=30):
