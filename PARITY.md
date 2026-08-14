@@ -1,0 +1,65 @@
+# market-bot ↔ HRPLUSNM tenglik jadvali
+
+> Manba: `jekloviyapoya/market-bot/bot.py` (21 564 qator), 2026-08-14
+> inventarizatsiyasi. Maqsad: **xatti-harakat tengligi** — market-bot
+> qanday ishlasa, HRPLUSNM ham shunday. Kod ko'chirilmaydi (bitta do'kon,
+> qotirilgan qiymatlar, tenant_id yo'q) — har funksiya ko'p ijarachi
+> qilib qayta yoziladi.
+>
+> Har yopilgan band commit SHA bilan belgilanadi.
+
+## ✅ Bor (tenglik yetarli)
+
+| market-bot | HRPLUSNM |
+|---|---|
+| 👥 Xodimlar, ⏱ Davomat, 💰 Ish haqi, 🏆 Reyting, 📅 Jadval | `xodimlar` |
+| 📋 Vazifa berish, ✅ Tasdiqlash, takror | `vazifalar` (67189be) |
+| 🧑‍💼 Ishga qabul | `hr` |
+| 📦 Ombor hisoboti | `ombor` |
+| 🛒 Zakaz tavsiyasi, ABC, turib qolganlar | `ombor_ai` |
+| 📦 Inventarizatsiya | `inventarizatsiya` |
+| ⭐ Mijoz baholari (QR) | `mijoz` |
+| 📈 MARKETING, 📣 Post | `marketing` |
+| 🏢 Firmalar (qarz), 🎯 Zakaz limiti | `moliya` |
+| Nakladnoy (AI o'qish, moslash, yaratish) | `nakladnoy` (55e227a) |
+| Kelish/Ketish, Holat, Ballarim, Baholarim | `xodimlar` xodim tomoni |
+
+## ❌ Yo'q — ko'chirish navbati
+
+Tartib — do'konga foyda bo'yicha. Yopilganda SHA yoziladi.
+
+1. **💵 Savdo** — sotuv hisobotlari: boshliqqa bugungi/haftalik/oylik,
+   xodimga «mening savdom». market-bot: 12418-qator atrofida
+2. **🛒 Zakaz** — firmaga buyurtma tuzish oqimi (tavsiyadan farqli,
+   bu haqiqiy zakaz ro'yxati). 5644-qator
+3. **🛒 Zarur mahsulotlar** — jamoaviy «tugayapti» ro'yxati, xodim ham
+   qo'shadi. 16647-qator
+4. **📋 Vazifa tarixi** + 📊 Vazifa hisoboti (kesimlar). 13579-qator
+5. **📆 Haftalik / 🗓 Muddatli hisobot** — xodimning davriy hisobotlari.
+   11288/11308-qator
+6. **📢 Takliflar va Shikoyatlar** — XODIM taklif/shikoyati (mijoznikidan
+   farqli, ichki, anonim variant bilan). 12966-qator
+7. **💬 Guruh chat** — jamoa ichki chati, yoq/o'chir sozlamasi bilan.
+   11503-qator
+8. **🎯 Maqsadlar** — savdo maqsadlari va holat paneli. 2344-qator
+9. **💰 Pul taqvimi** — to'lovlar taqvimi (moliya'ga qo'shimcha).
+   5190-qator
+10. **📥 Excel** — vazifa/davomat eksporti (openpyxl). 13030-qator
+11. **⚖️ PLU kodlar** — hisobot (kimda bor/yo'q) + bo'shlarga taklif.
+    14564-qator
+12. **🔗 Mahsulot bog'lash** — xodimga mahsulot biriktirish. 14695-qator
+13. **🧠 Test natijalari** + kunlik quiz xodimlarga (set_toggle_quiz).
+    12977-qator
+14. **📁 Menyu guruhlari** — tugmalarni papkalarga yig'ish, yashirish
+    (menu_groups, hidden_menu). 4382–4560-qator
+15. **Sozlamalar kalitlari** — quiz/chat/ai_advice yoq-o'chir,
+    tips_time, ombor eslatma jadvali (set_toggle_*, set_stock_*)
+16. **⏰ Vazifa kechiktirish** — «Keyinroq / 1 soatdan keyin» eslatma
+
+## ⚠️ Ochiq savol
+
+- market-bot'da `/app` (webapp, PLU plitkasi) bor — Telegram WebApp.
+  HRPLUSNM'da webapp yo'q. Ko'chiriladimi — egasi hal qiladi.
+- Reply-keyboard (doimiy pastki menyu) market-bot uslubi; HRPLUSNM
+  inline-menyuda. Tenglik ma'noda, ko'rinishda emas — hozircha inline
+  qoladi, chunki 50 biznesda rol-menyu inline'da soddaroq.

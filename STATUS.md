@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · ovoz → matn (Groq Whisper)
+> Oxirgi yangilanish: 2026-08-14 · PARITY.md — market-bot bilan tenglik rejasi
 >
 > **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
@@ -350,6 +350,13 @@ Yetishmayotgan qismlar (ehtiyoj paydo bo'lganda):
 - `POST /api/usage` — modul limitlari, BMP tomonida tayyor bo'lgach
 
 ---
+
+## Joriy yo'nalish: market-bot tengligi
+
+Egasining ko'rsatmasi: market-bot qanday ishlasa, HRPLUSNM ham shunday.
+Farqlar `PARITY.md` da — 16 band, tartib bilan yopiladi, kod
+ko'chirilmaydi (xatti-harakat ko'chiriladi). market-bot repo tokenga
+qo'shilgan.
 
 ## Ochiq savollar
 
