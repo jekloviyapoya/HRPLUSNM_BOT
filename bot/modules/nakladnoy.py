@@ -24,7 +24,8 @@ import io
 import logging
 
 from . import base, nak_prompt, registry
-from .. import ai, ctx, db, sessions, tenant, ui, users
+from .. import (ai, bito, catalog, ctx, db, nak_upload, sessions,
+                tenant, ui, users)
 from ..errors import BotError
 
 log = logging.getLogger(__name__)
@@ -259,6 +260,69 @@ def extract(data=None, filename="", text=None, session=None):
     return parsed
 
 
+# ------------------------------------------------------------ moslashtirish
+
+
+def match_doc(doc_id):
+    """Hamma qatorlarni katalogga moslashtiradi va saqlaydi."""
+    items = get_items(doc_id)
+    results = catalog.match_all([dict(row) for row in items])
+    for row, found in zip(items, results):
+        db.run(
+            "UPDATE nak_item SET product_id = ?, product_name = ?, "
+            "  match_state = ?, note = ? WHERE tenant_id = ? AND id = ?",
+            (found["product_id"], found["product_name"],
+             "topildi" if found["state"] == "topildi" else "yoq",
+             found["how"], ctx.require(), row["id"]),
+        )
+    db.run("UPDATE nak_doc SET status = 'moslashtirilmoqda' "
+           "WHERE tenant_id = ? AND id = ?", (ctx.require(), doc_id))
+    return summary(doc_id)
+
+
+def summary(doc_id):
+    rows = get_items(doc_id)
+    matched = [r for r in rows if r["match_state"] == "topildi"]
+    skipped = [r for r in rows if r["match_state"] == "tashlab"]
+    pending = [r for r in rows
+               if r["match_state"] not in ("topildi", "tashlab")]
+    return {"all": rows, "matched": matched, "pending": pending,
+            "skipped": skipped}
+
+
+def set_match(item_id, product_id, product_name):
+    db.run(
+        "UPDATE nak_item SET product_id = ?, product_name = ?, "
+        "  match_state = 'topildi', note = 'qo''lda' "
+        "WHERE tenant_id = ? AND id = ?",
+        (product_id, product_name, ctx.require(), item_id),
+    )
+    row = db.row("SELECT raw_name FROM nak_item WHERE tenant_id = ? AND id = ?",
+                 (ctx.require(), item_id))
+    if row:
+        catalog.remember(row["raw_name"], product_id, product_name)
+
+
+def skip_item(item_id):
+    db.run("UPDATE nak_item SET match_state = 'tashlab' "
+           "WHERE tenant_id = ? AND id = ?", (ctx.require(), item_id))
+
+
+def find_supplier(name, client=None):
+    """Hujjatdagi firma nomiga Bito'dan mos keluvchini topadi."""
+    if not name:
+        return None, []
+    client = client or bito.client()
+    rows, _ = client.suppliers(page=1, limit=20, search=name.strip())
+    if not rows:
+        return None, []
+    key = catalog.normalize(name)
+    for row in rows:
+        if catalog.normalize(row.get("name")) == key:
+            return row, rows
+    return None, rows[:5]
+
+
 # -------------------------------------------------------------------- modul
 
 
@@ -294,6 +358,30 @@ def _register(bot, guard):
         elif action.startswith("korish"):
             doc_id = int(action.split("_", 1)[1])
             _review(bot, chat_id, tg_id, doc_id)
+        elif action.startswith("moslash"):
+            doc_id = int(action.split("_", 1)[1])
+            _match_screen(bot, chat_id, tg_id, doc_id)
+        elif action.startswith("navbat"):
+            doc_id = int(action.split("_", 1)[1])
+            _next_pending(bot, chat_id, tg_id, doc_id)
+        elif action.startswith("tanla"):
+            _, item_id, product_id = action.split("_", 2)
+            _pick(bot, chat_id, tg_id, int(item_id), product_id)
+        elif action.startswith("tashla"):
+            item_id = int(action.split("_", 1)[1])
+            skip_item(item_id)
+            row = db.row("SELECT doc_id FROM nak_item WHERE tenant_id = ? "
+                         "AND id = ?", (ctx.require(), item_id))
+            _next_pending(bot, chat_id, tg_id, row["doc_id"])
+        elif action.startswith("firma"):
+            _, doc_id, supplier_id = action.split("_", 2)
+            db.run("UPDATE nak_doc SET supplier_id = ? WHERE tenant_id = ? "
+                   "AND id = ?", (supplier_id, ctx.require(), int(doc_id)))
+            bot.send_message(chat_id, "Firma tanlandi.")
+            _match_screen(bot, chat_id, tg_id, int(doc_id))
+        elif action.startswith("yukla"):
+            doc_id = int(action.split("_", 1)[1])
+            _upload(bot, chat_id, tg_id, doc_id)
         elif action.startswith("bekor"):
             doc_id = int(action.split("_", 1)[1])
             db.run("UPDATE nak_doc SET status = 'bekor' WHERE tenant_id = ? "
@@ -418,12 +506,11 @@ def _review(bot, chat_id, tg_id, doc_id):
 
     bot.send_message(
         chat_id,
-        "Keyingi bosqich — mahsulotlarni Bito katalogiga moslashtirish — "
-        "hali tayyor emas. Hozircha faqat o'qish va tekshirish ishlaydi.",
+        "Ma'lumot to'g'ri bo'lsa — moslashtirishga o'tamiz.",
         reply_markup=ui.buttons(
-            [("🗑 Bekor qilish", f"mod:nakladnoy:bekor_{doc_id}"),
-             ("📄 Yangi hujjat", "mod:nakladnoy:yangi")],
-            back="menu:root"),
+            [("➡️ Moslashtirish", f"mod:nakladnoy:moslash_{doc_id}"),
+             ("🗑 Bekor qilish", f"mod:nakladnoy:bekor_{doc_id}")],
+            row_width=1, back="menu:root"),
     )
 
 
@@ -452,3 +539,161 @@ def _panel(bot, chat_id, tg_id):
 
     bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML",
                      reply_markup=ui.buttons(buttons, back="menu:root"))
+
+
+# ------------------------------------------------------- moslashtirish ekrani
+
+
+def _match_screen(bot, chat_id, tg_id, doc_id):
+    users.require_role(tg_id, "manager")
+    doc = get_doc(doc_id)
+    if not doc:
+        bot.send_message(chat_id, "Hujjat topilmadi.")
+        return
+
+    if catalog.is_stale():
+        bot.send_message(
+            chat_id,
+            "⚠️ Mahsulot katalogi eskirgan yoki bo'sh. "
+            "Ombor → Yangilash tugmasini bosing, keyin qaytib keling.")
+        return
+
+    state = match_doc(doc_id) if doc["status"] == "tekshirilmoqda" \
+        else summary(doc_id)
+
+    lines = [
+        "<b>Moslashtirish</b>", "",
+        f"✅ Topildi: {len(state['matched'])} ta",
+        f"❓ Qo'lda tanlash kerak: {len(state['pending'])} ta",
+    ]
+    if state["skipped"]:
+        lines.append(f"⏭ Tashlab ketilgan: {len(state['skipped'])} ta")
+
+    buttons = []
+    if not doc["supplier_id"]:
+        found, options = find_supplier(doc["supplier_name"])
+        if found:
+            db.run("UPDATE nak_doc SET supplier_id = ? WHERE tenant_id = ? "
+                   "AND id = ?", (found["id"], ctx.require(), doc_id))
+            lines += ["", f"Firma: {ui.escape(found.get('name') or '')}"]
+        elif options:
+            bot.send_message(
+                chat_id,
+                f"Firma «{ui.escape(doc['supplier_name'] or '')}» aniq "
+                "topilmadi. Tanlang:",
+                parse_mode="HTML",
+                reply_markup=ui.buttons(
+                    [(ui.escape(o.get("name") or "—"),
+                      f"mod:nakladnoy:firma_{doc_id}_{o['id']}")
+                     for o in options], row_width=1,
+                    back=f"mod:nakladnoy:korish_{doc_id}"))
+            return
+        else:
+            lines += ["", "⚠️ Firma topilmadi — Bito'da yetkazib beruvchi "
+                          "yaratilgan bo'lishi kerak."]
+    else:
+        lines += ["", "Firma: tanlangan"]
+
+    if state["pending"]:
+        buttons.append(("❓ Qo'lda tanlash", f"mod:nakladnoy:navbat_{doc_id}"))
+    if state["matched"] and doc["supplier_id"]:
+        buttons.append((f"⬆️ Bito'ga yuklash ({len(state['matched'])} ta)",
+                        f"mod:nakladnoy:yukla_{doc_id}"))
+    buttons.append(("🗑 Bekor qilish", f"mod:nakladnoy:bekor_{doc_id}"))
+
+    bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML",
+                     reply_markup=ui.buttons(buttons, row_width=1,
+                                             back="menu:root"))
+
+
+def _next_pending(bot, chat_id, tg_id, doc_id):
+    state = summary(doc_id)
+    if not state["pending"]:
+        bot.send_message(chat_id, "Hamma qator moslashtirildi. 👍")
+        _match_screen(bot, chat_id, tg_id, doc_id)
+        return
+
+    row = state["pending"][0]
+    found = catalog.match(row["raw_name"], barcode=row["barcode"])
+    left = len(state["pending"])
+
+    lines = [f"<b>{ui.escape(row['raw_name'])}</b>",
+             f"{row['qty']:g} × {ui.money(row['price'])}", "",
+             f"Qolgan: {left} ta"]
+
+    buttons = []
+    if found["candidates"]:
+        lines.append("")
+        lines.append("Qaysi mahsulot?")
+        for candidate in found["candidates"]:
+            buttons.append((
+                f"{candidate['name'][:45]}",
+                f"mod:nakladnoy:tanla_{row['id']}_{candidate['product_id']}",
+            ))
+    else:
+        lines.append("")
+        lines.append("Katalogdan o'xshash mahsulot topilmadi.")
+    buttons.append(("⏭ Tashlab ketish", f"mod:nakladnoy:tashla_{row['id']}"))
+
+    bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML",
+                     reply_markup=ui.buttons(
+                         buttons, row_width=1,
+                         back=f"mod:nakladnoy:moslash_{doc_id}"))
+
+
+def _pick(bot, chat_id, tg_id, item_id, product_id):
+    row = db.row("SELECT * FROM nak_item WHERE tenant_id = ? AND id = ?",
+                 (ctx.require(), item_id))
+    if not row:
+        return
+    match = db.row("SELECT name FROM catalog WHERE tenant_id = ? "
+                   "AND product_id = ?", (ctx.require(), product_id))
+    set_match(item_id, product_id, match["name"] if match else None)
+    bot.send_message(chat_id, "Eslab qoldim — keyingi nakladnoylarda "
+                              "avtomatik qo'llanadi.")
+    _next_pending(bot, chat_id, tg_id, row["doc_id"])
+
+
+def _upload(bot, chat_id, tg_id, doc_id):
+    users.require_role(tg_id, "manager")
+    doc = get_doc(doc_id)
+    state = summary(doc_id)
+    if not doc["supplier_id"]:
+        bot.send_message(chat_id, "Avval firmani tanlang.")
+        return
+    if not state["matched"]:
+        bot.send_message(chat_id, "Moslashtirilgan qator yo'q.")
+        return
+
+    note = bot.send_message(chat_id, "Bito'ga yuklanmoqda…")
+    items = [dict(row) for row in state["matched"]]
+    result = nak_upload.upload(items, doc["supplier_id"])
+    nak_upload.mark_uploaded(doc_id, result)
+
+    try:
+        bot.delete_message(chat_id, note.message_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+    currency = tenant.get("currency_name") or "so'm"
+    lines = []
+    if result["numbers"]:
+        lines.append("✅ Bito'ga yuklandi")
+        lines.append(f"Kirim raqami: {', '.join(result['numbers'])}")
+        lines.append(f"{result['uploaded_count']} ta mahsulot, "
+                     f"{ui.money(result['uploaded_total'], currency)}")
+    if result["failed"]:
+        lines.append("")
+        lines.append(f"⚠️ {len(result['failed'])} ta partiya yuklanmadi:")
+        for fail in result["failed"]:
+            lines.append(f"• {fail['count']} ta mahsulot: "
+                         f"{ui.escape(fail['error'])}")
+        lines.append("")
+        lines.append("Yuklanmagan qismini qayta yuklash uchun nakladnoyni "
+                     "qaytadan yuboring.")
+    if state["skipped"]:
+        lines.append(f"\n⏭ {len(state['skipped'])} ta qator tashlab ketildi.")
+
+    for chunk in ui.chunks("\n".join(lines)):
+        bot.send_message(chat_id, chunk, parse_mode="HTML")
+    bot.send_message(chat_id, "—", reply_markup=ui.main_menu(tg_id))

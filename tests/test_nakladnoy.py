@@ -308,3 +308,55 @@ def test_xodimga_menyuda_korinmaydi(env):
     impl = registry.BY_KEY["nakladnoy"].impl
     assert impl.menu("staff") == []
     assert len(impl.menu("owner")) == 1
+
+
+# --- moslashtirish oqimi ---
+
+def test_moslashtirish_saqlanadi(env):
+    n = env["n"]
+    catalog = importlib.import_module("bot.catalog")
+    for pid, name in [("p1", "Coca-Cola 1L"), ("p2", "Non")]:
+        catalog.upsert({"_id": pid, "name": name, "barcodes": [],
+                        "measure": {"short_name": "Dona"}, "sku": None,
+                        "category": {"name": "x"}})
+    parsed = n.normalize({"items": [
+        {"name": "Coca-Cola 1L", "qty": 2, "price": 5000},
+        {"name": "Kartoshka", "qty": 3, "price": 4000},
+    ]})
+    doc_id = n.create_doc(900, "photo")
+    n.save_doc(doc_id, parsed)
+    state = n.match_doc(doc_id)
+    assert len(state["matched"]) == 1
+    assert len(state["pending"]) == 1
+    assert state["matched"][0]["product_id"] == "p1"
+
+
+def test_qolda_tanlash_xotiraga_yoziladi(env):
+    n = env["n"]
+    catalog = importlib.import_module("bot.catalog")
+    catalog.upsert({"_id": "p9", "name": "Maxsus tovar", "barcodes": [],
+                    "measure": {"short_name": "Dona"}, "sku": None,
+                    "category": {"name": "x"}})
+    parsed = n.normalize({"items": [{"name": "MXS-99", "qty": 1, "price": 100}]})
+    doc_id = n.create_doc(900, "photo")
+    n.save_doc(doc_id, parsed)
+    n.match_doc(doc_id)
+    item = n.get_items(doc_id)[0]
+    n.set_match(item["id"], "p9", "Maxsus tovar")
+
+    assert n.summary(doc_id)["matched"][0]["product_id"] == "p9"
+    # Keyingi hujjatda avtomatik
+    assert catalog.match("MXS-99")["product_id"] == "p9"
+
+
+def test_tashlab_ketilgan_yuklanmaydi(env):
+    n = env["n"]
+    parsed = n.normalize({"items": [{"name": "X", "qty": 1, "price": 100}]})
+    doc_id = n.create_doc(900, "photo")
+    n.save_doc(doc_id, parsed)
+    n.match_doc(doc_id)
+    item = n.get_items(doc_id)[0]
+    n.skip_item(item["id"])
+    state = n.summary(doc_id)
+    assert state["matched"] == []
+    assert len(state["skipped"]) == 1

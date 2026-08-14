@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `f30d669` + Sozlamalar
+> Oxirgi yangilanish: 2026-08-14 · commit `d4f85ce` + nakladnoy to'liq
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -100,9 +100,11 @@
   hujjatda ixtiyoriy deb yozilgan bo'lsa ham (400 qaytaradi)
 - So'rov usuli (GET/POST) noma'lum — ikkalasi sinaladi, ishlagani keshlanadi
 
-**`nakladnoy` moduli — 1-qism** (`bot/modules/nakladnoy.py`, migratsiya `007`)
+**`nakladnoy` moduli — to'liq** (`bot/modules/nakladnoy.py`, migratsiya `007`)
 - Rasm / PDF / Excel qabul qiladi, AI o'qiydi, tekshirish ekranini beradi
-- **Bito'ga hech narsa yozmaydi** — moslashtirish va kirim 2-qismda
+- Moslashtirish ekrani: nomzodlardan tanlash, tanlov xotiraga yoziladi
+- Firma Bito yetkazib beruvchilaridan topiladi, topilmasa ro'yxatdan tanlanadi
+- **Bito'ga kirim** (`bot/nak_upload.py`)
 - `bot/ai.py`: Anthropic klienti. Javob kesilsa **yuqoriga** qarab qayta
   urinadi (pastga urinish battar kesadi), 529/503 da qayta uriniladi
 - `nak_prompt.py`: ekstraksiya qoidalari market-bot'dan olingan va test
@@ -111,10 +113,18 @@
   hujjatlarda AI'ga eslatma sifatida beriladi
 - Hujjatdagi jami bilan solishtirish: farq 1% dan oshsa ogohlantiradi
 
-**INVARIANT — buzilmasin:** `qty` = blok soni, `price` = bitta dona narxi,
-jami = `qty × block_size × price`. market-bot'da bu buzilib, Bito'ga olti
-barobar ortiq yuklangan edi. `line_total()` — yagona hisoblash joyi,
-oltita test qo'riqlaydi.
+**Kirim yuklashdagi uchta himoya** (`nak_upload.py`)
+- **504 «yaratilmadi» degani emas.** Bito nginx'i uzsa, kirim serverda
+  yaratilgan bo'lishi mumkin. Avtomatik qayta yuborilmaydi — izohdagi
+  betakror belgi bo'yicha tekshiriladi
+- **Partiyalash**: 60 qatordan bo'linadi, aks holda katta hujjat 504 beradi.
+  Bir partiya yiqilsa qolgani yuklanadi
+- **26000 xatosi** (mahsulot o'chirilgan) nomi bilan aytiladi
+
+**INVARIANT — buzilmasin:** `qty` = blok soni, `price` = bitta dona narxi.
+Blok donaga FAQAT `nak_upload.build_products()` da aylanadi:
+`amount = qty × block_size`, `cost = price`. market-bot'da bu ikki joyda
+qilinib, Bito'ga olti barobar ortiq yuklangan edi (2026-08-02).
 
 **Katalog keshi va moslashtirish** (`bot/catalog.py`, migratsiya `008`)
 - Ombor skaneri hamma sahifani varaqlaganda **katalog ham to'ldiriladi** —
@@ -140,7 +150,7 @@ Modul emas — har doim ochiq. To'rt bo'lim:
 Ishdan bo'shatishda hech narsa o'chirilmaydi — `users.active = 0`, davomat
 va ish haqi tarixi saqlanadi.
 
-**Testlar:** 191 ta, hammasi o'tadi.
+**Testlar:** 214 ta, hammasi o'tadi.
 
 ---
 
@@ -153,7 +163,7 @@ va ish haqi tarixi saqlanadi.
 | `hr` | ✅ | ❌ |
 | `ombor` | ✅ | ✅ |
 | `ombor_ai` | ✅ | ❌ |
-| `nakladnoy` | ✅ | ⚠️ 1-qism |
+| `nakladnoy` | ✅ | ✅ |
 | `inventarizatsiya` | ✅ | ❌ |
 | `moliya` | ✅ | ❌ |
 | `marketing` | ✅ | ❌ |
@@ -166,15 +176,12 @@ xodimga bitta.
 
 ## Keyingi qadam
 
-**`nakladnoy` 2-qism** — mahsulotlarni Bito katalogiga moslashtirish va
-kirim yaratish. Eng xavfli qism: Bito'ga yozadi.
+**`vazifalar` moduli** — Bito talab qilmaydi, xodimlar bilan bog'lanadi.
 
-Moslashtirish **tayyor** (`bot/catalog.py`). Qolgani:
-- Moslashtirish ekrani: nomzodlardan tanlash, xotiraga yozish
-- Topilmaganlar uchun yangi mahsulot yaratish yoki tashlab ketish
-- `purchase` yaratish; `PUT product/update` da `custom_fields` qaytarilishi
-  (aks holda PLU o'chadi — `LESSONS-MARKET-BOT.md` §2.3)
-- Takroriy yuklashdan himoya (idempotentlik)
+Nakladnoyda hali yo'q: katalogda topilmagan mahsulotni **Bito'da yangi
+yaratish** (hozircha faqat tashlab ketiladi). `PUT product/update` da
+`custom_fields` qaytarilishi shart — aks holda PLU o'chadi
+(`LESSONS-MARKET-BOT.md` §2.3).
 
 Undan keyingi tartib: `ombor_ai` → `inventarizatsiya` → `moliya` →
 `marketing` → `vazifalar` → `hr` → `mijoz`.

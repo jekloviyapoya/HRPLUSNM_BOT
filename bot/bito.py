@@ -45,11 +45,14 @@ PATHS = {
     "currencies": ["currency/get-all", "currencies/get-all"],
     "products": ["product/get-paging", "products/get-paging"],
     "product_by_barcode": ["product/get-by-barcode", "products/get-by-barcode"],
+    "suppliers": ["supplier/get-paging", "suppliers/get-paging"],
+    "purchase_create": ["purchase/create", "purchases/create"],
+    "purchases": ["purchase/get-paging", "purchases/get-paging"],
 }
 
 # Sahifali so'rovlar. Bito `page` ni MAJBURIY talab qiladi — hujjatda
 # ixtiyoriy deb yozilgan bo'lsa ham. Yuborilmasa 400 qaytadi.
-PAGED = {"products"}
+PAGED = {"products", "suppliers", "purchases"}
 MAX_LIMIT = 200
 
 
@@ -109,7 +112,7 @@ class Bito:
     def _url(self, path):
         return (self.base_url or _base()) + path.lstrip("/")
 
-    def raw(self, path, method="GET", scheme=None, **kwargs):
+    def raw(self, path, method="GET", scheme=None, timeout=None, **kwargs):
         """Bitta so'rov. Javob obyektini qaytaradi, xato tashlamaydi."""
         scheme = scheme or self.scheme
         if not self.api_key:
@@ -124,7 +127,7 @@ class Bito:
                     method,
                     self._url(path),
                     headers=headers,
-                    timeout=TIMEOUT,
+                    timeout=timeout or TIMEOUT,
                     **kwargs,
                 )
             except Exception as e:  # noqa: BLE001 — tarmoq xatosi
@@ -305,6 +308,20 @@ class Bito:
     def products(self, page=1, limit=MAX_LIMIT, search=None, category_id=None):
         return self.paged("products", page=page, limit=limit,
                           search=search, category_id=category_id)
+
+    def suppliers(self, page=1, limit=MAX_LIMIT, search=None):
+        return self.paged("suppliers", page=page, limit=limit, search=search)
+
+    def create_purchase(self, body, timeout=None):
+        """Kirim yaratadi. Javob obyektini QAYTARADI, xato tashlamaydi.
+
+        Sabab: 502/504 «yaratilmadi» degani emas — Bito nginx'i javobni
+        kutmay uzishi mumkin, kirim esa serverda yaratilgan bo'ladi.
+        Qaror chaqiruvchida qabul qilinadi.
+        """
+        path = self.resolve("purchase_create")
+        return self.raw(path, "POST", json=body,
+                        **({"timeout": timeout} if timeout else {}))
 
     def uoms(self, only_active=True):
         items = self._items(self.get("uoms"))
