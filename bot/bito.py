@@ -57,13 +57,16 @@ PATHS = {
     "credit": ["reports/dashboard/summary/credit/get-summary",
                "reports/pos/summary/credit/get-summary"],
     "revision_create": ["revision/create", "revisions/create"],
+    # DIQQAT: bu hisobot faqat SOTILGAN mahsulotlarni beradi.
+    # Sotilmaganlarni topish uchun katalogdan ayirish kerak.
+    "sales_by_item": ["sales/by-item-pagin", "reports/sales/by-item-pagin"],
     "income_expense": ["reports/finance/income-expense-stats",
                        "reports/finance/income_expense_stats"],
 }
 
 # Sahifali so'rovlar. Bito `page` ni MAJBURIY talab qiladi — hujjatda
 # ixtiyoriy deb yozilgan bo'lsa ham. Yuborilmasa 400 qaytadi.
-PAGED = {"products", "suppliers", "purchases"}
+PAGED = {"products", "suppliers", "purchases", "sales_by_item"}
 MAX_LIMIT = 200
 
 
@@ -332,6 +335,11 @@ class Bito:
     def revision_status(self, revision_id, status):
         return self.raw(f"revision/set-status/{revision_id}", "PUT",
                         json={"status": status}, timeout=60)
+
+    def sales_by_item(self, page=1, limit=200, from_date=None, to_date=None):
+        return self.paged("sales_by_item", page=page, limit=limit,
+                          from_date=from_date, to_date=to_date,
+                          organization_ids=[tenant.get("bito_org_id")])
 
     def balance(self):
         return self.get("balance")

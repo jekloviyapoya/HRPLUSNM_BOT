@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `745d5ad` + inventarizatsiya
+> Oxirgi yangilanish: 2026-08-14 · commit `a84a7e7` + ombor_ai
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -197,7 +197,20 @@ Bir hisobot yiqilsa qolgani ishlaydi.
 - Yuklashdan oldin aniq ogohlantirish, faqat egasi tasdiqlaydi
 - 250 tadan ortiq mahsulot 100 tadan bo'lib qo'shiladi
 
-**Testlar:** 293 ta, hammasi o'tadi.
+**`ombor_ai` moduli** (migratsiya `012`)
+- Zakaz tavsiyasi: `kunlik_sotuv × ufq − qoldiq`. Eng shoshilinchi
+  (zaxirasi tez tugaydigani) birinchi. Bot hech narsa buyurtma qilmaydi —
+  faqat ko'rsatadi
+- **Turib qolganlar katalogdan sotuv keshini AYIRIB olinadi.** Bito'ning
+  `sales/by-item` hisoboti umuman sotilmagan mahsulotni ko'rsatmaydi —
+  ayirilmasa ro'yxat doim bo'sh chiqardi
+- Sekin sotilayotganlar: zaxirasi 90 kundan ortiqqa yetadiganlar
+- ABC: tushum ulushi bo'yicha. **Sinf mahsulot qo'shilgunga qadar bo'lgan
+  ulushga qarab beriladi** — aks holda chegarani kesib o'tgan eng katta
+  tovar «C» bo'lib chiqardi (test topdi)
+- Sotuv hisoboti keshlanadi, kuniga bir marta yangilanadi
+
+**Testlar:** 313 ta, hammasi o'tadi.
 
 ---
 
@@ -209,7 +222,7 @@ Bir hisobot yiqilsa qolgani ishlaydi.
 | `vazifalar` | ✅ | ✅ |
 | `hr` | ✅ | ❌ |
 | `ombor` | ✅ | ✅ |
-| `ombor_ai` | ✅ | ❌ |
+| `ombor_ai` | ✅ | ✅ |
 | `nakladnoy` | ✅ | ✅ |
 | `inventarizatsiya` | ✅ | ✅ |
 | `moliya` | ✅ | ✅ |
@@ -223,14 +236,14 @@ xodimga bitta.
 
 ## Keyingi qadam
 
-**`ombor_ai` moduli** — ABC-XYZ tahlil, sotuv tezligiga qarab zakaz tavsiyasi.
+**`hr` moduli** — vakansiya, nomzod savollari, baholash.
 
 Nakladnoyda hali yo'q: katalogda topilmagan mahsulotni **Bito'da yangi
 yaratish** (hozircha faqat tashlab ketiladi). `PUT product/update` da
 `custom_fields` qaytarilishi shart — aks holda PLU o'chadi
 (`LESSONS-MARKET-BOT.md` §2.3).
 
-Undan keyingi tartib: `hr` → `mijoz`.
+Undan keyingi tartib: `mijoz`.
 
 **Sozlamalarda hali yo'q** (xodimlar moduli uchun kerak): ish joyi
 lokatsiyasi, radius, jadval qo'yish oynasi, stavka belgilash, ball berish.
