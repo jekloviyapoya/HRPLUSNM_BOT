@@ -8,7 +8,7 @@ import functools
 import logging
 
 from . import (config, ctx, db, license, modules, onboarding, sessions,
-               tenant, tenants, ui, users)
+               settings_ui, tenant, tenants, ui, users)
 from .modules import registry
 from .errors import BotError
 
@@ -325,6 +325,9 @@ def register(bot):
             )
             return
         if section == "sozlamalar":
+            settings_ui.panel(bot, call.message.chat.id, call.from_user.id)
+            return
+        if section == "jamoa":
             _staff_panel(call)
             return
 
@@ -347,6 +350,8 @@ def register(bot):
             return safe(wrapper)
 
         return decorator
+
+    settings_ui.register(bot, safe)
 
     for _spec in registry.implemented():
         try:

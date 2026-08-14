@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `84ad4c6` + moslashtirish
+> Oxirgi yangilanish: 2026-08-14 · commit `f30d669` + Sozlamalar
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -128,7 +128,19 @@ oltita test qo'riqlaydi.
   nakladnoylarda avtomatik qo'llanadi (`nak_alias`)
 - Defis bo'shliqqa aylanadi: «Coca-Cola» va «Coca Cola» bir-birini topsin
 
-**Testlar:** 173 ta, hammasi o'tadi.
+**Sozlamalar bo'limi** (`bot/settings_ui.py`)
+Modul emas — har doim ochiq. To'rt bo'lim:
+- **Do'kon**: nom, valyuta, vaqt mintaqasi, ish joyi (lokatsiya), radius
+- **Bito**: kalitni almashtirish, tashkilot/ombor/narx qayta tanlash,
+  aloqani tekshirish
+- **Xodimlar**: har xodim uchun jadval (haftalik, bir urinishda),
+  oylik yoki kunlik stavka, rol, ishdan bo'shatish
+- **Ombor**: kam qolgan chegarasi
+
+Ishdan bo'shatishda hech narsa o'chirilmaydi — `users.active = 0`, davomat
+va ish haqi tarixi saqlanadi.
+
+**Testlar:** 191 ta, hammasi o'tadi.
 
 ---
 

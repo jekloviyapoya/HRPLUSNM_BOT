@@ -7,6 +7,7 @@ from telebot import types
 log = logging.getLogger(__name__)
 
 BASE_ITEMS = [
+    ("👋 Jamoa", "menu:jamoa"),
     ("⚙️ Sozlamalar", "menu:sozlamalar"),
     ("💳 Obuna", "menu:obuna"),
 ]
