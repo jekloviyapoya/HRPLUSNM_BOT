@@ -94,6 +94,11 @@ def register(bot):
             _apply_to_job(message, payload[4:])
             return
 
+        # QR kod orqali baho — mijoz ham tenant foydalanuvchisi emas
+        if payload and payload.startswith("baho_"):
+            _start_feedback(message, payload[5:])
+            return
+
         # Yangi odam
         if ctx.current() is None:
             if payload:
@@ -120,6 +125,68 @@ def register(bot):
             return
 
         _greet(message)
+
+    def _start_feedback(message, raw_id):
+        """Mijoz QR kod orqali kirdi."""
+        try:
+            tenant_id = int(raw_id)
+        except ValueError:
+            bot.send_message(message.chat.id, "Havola noto'g'ri.")
+            return
+        if not db.row("SELECT id FROM tenant WHERE id = ? AND active = 1",
+                      (tenant_id,)):
+            bot.send_message(message.chat.id, "Do'kon topilmadi.")
+            return
+
+        ctx.set(tenant_id)
+        if not modules.enabled("mijoz"):
+            bot.send_message(message.chat.id, "Baho qabul qilish hozir "
+                                              "faol emas.")
+            return
+        shop = tenant.shop_name()
+        sessions.set(message.from_user.id, "baho:yulduz",
+                     {"tenant_id": tenant_id}, tenant_id=tenant_id)
+        bot.send_message(
+            message.chat.id,
+            f"<b>{ui.escape(shop)}</b>\n\nXizmatimizni baholang:",
+            parse_mode="HTML",
+            reply_markup=ui.buttons(
+                [(f"{star}⭐", f"baho:{tenant_id}:{star}")
+                 for star in range(1, 6)], row_width=5))
+
+    @bot.callback_query_handler(func=lambda c: (c.data or "").startswith("baho:"))
+    @safe
+    def _feedback_stars(call):
+        ui.ack(bot, call, "Rahmat!")
+        from .modules import mijoz
+
+        _, raw_tenant, raw_star = call.data.split(":")
+        tenant_id, star = int(raw_tenant), int(raw_star)
+        tg_id = call.from_user.id
+
+        with ctx.scope(tenant_id):
+            feedback_id = mijoz.add(tg_id=tg_id, stars=star)
+            low = star < mijoz.ALERT_BELOW
+            targets = [u["tg_id"] for u in users.listing()
+                       if u["role"] in ("owner", "manager")] if low else []
+            shop = tenant.shop_name()
+
+        sessions.set(tg_id, "baho:izoh",
+                     {"tenant_id": tenant_id, "feedback_id": feedback_id},
+                     tenant_id=tenant_id)
+        ask = ("Nima yoqmadi? Yozib qoldiring — tuzatamiz."
+               if low else "Rahmat! Taklif yoki izohingiz bo'lsa yozing.")
+        bot.send_message(call.message.chat.id,
+                         f"{mijoz.STARS.get(star, '')} {'⭐' * star}\n\n{ask}")
+
+        for target in targets:
+            try:
+                bot.send_message(
+                    target,
+                    f"😞 {shop}: mijoz {star}⭐ qo'ydi. Izohini kutmoqdamiz.")
+            except Exception:  # noqa: BLE001
+                log.warning("Past baho xabari ketmadi: %s", target,
+                            exc_info=True)
 
     def _apply_to_job(message, raw_id):
         """Nomzod vakansiya havolasi orqali kirdi."""
@@ -612,6 +679,10 @@ def register(bot):
             _save_license_key(message)
             return
 
+        if state == "baho:izoh":
+            _save_feedback(message)
+            return
+
         if state == "hr:suhbat":
             data = sessions.get_global(tg_id)[1]
             _interview_step(message.chat.id, tg_id,
@@ -632,6 +703,38 @@ def register(bot):
             "Menyudan tanlang:",
             reply_markup=ui.main_menu(tg_id),
         )
+
+    def _save_feedback(message):
+        from .modules import mijoz
+
+        tg_id = message.from_user.id
+        data = sessions.get_global(tg_id)[1]
+        tenant_id = data.get("tenant_id")
+        text = (message.text or message.caption or "").strip()
+        photo = (message.photo[-1].file_id
+                 if message.content_type == "photo" else None)
+        sessions.clear(tg_id)
+
+        with ctx.scope(tenant_id):
+            row = mijoz.get(data["feedback_id"])
+            kind = "shikoyat" if (row and row["stars"]
+                                  and row["stars"] < mijoz.ALERT_BELOW) \
+                else "taklif"
+            mijoz.update(data["feedback_id"], text=text or None,
+                         photo_id=photo, kind=kind if text or photo else "baho")
+            targets = [u["tg_id"] for u in users.listing()
+                       if u["role"] in ("owner", "manager")]
+            shop = tenant.shop_name()
+            summary = mijoz.summary_text(mijoz.get(data["feedback_id"]))
+
+        bot.send_message(message.chat.id,
+                         "Rahmat! Fikringiz do'kon egasiga yetkazildi.")
+        for target in targets:
+            try:
+                bot.send_message(target, f"💬 {ui.escape(shop)} — yangi fikr:\n\n"
+                                         f"{summary}", parse_mode="HTML")
+            except Exception:  # noqa: BLE001
+                log.warning("Fikr yetkazilmadi: %s", target, exc_info=True)
 
     def _save_license_key(message):
         users.require_role(message.from_user.id, "owner")
@@ -670,6 +773,9 @@ def register(bot):
     @safe
     def _media(message):
         if _seen(message):
+            return
+        if sessions.get_global(message.from_user.id)[0] == "baho:izoh":
+            _save_feedback(message)
             return
         ctx.require()
         bot.send_message(

@@ -1,7 +1,9 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `3e2701d` + hr
+> Oxirgi yangilanish: 2026-08-14 · commit `ee3173e` + mijoz
+>
+> **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -223,7 +225,15 @@ Bir hisobot yiqilsa qolgani ishlaydi.
   jimgina rad etadi
 - AI yiqilsa ariza yo'qolmaydi: ballsiz saqlanadi va sabab yoziladi
 
-**Testlar:** 334 ta, hammasi o'tadi.
+**`mijoz` moduli** (migratsiya `014`)
+- QR kod: `t.me/BOT?start=baho_<tenant_id>`. Mijoz skanerlaydi, yulduzcha
+  qo'yadi, xohlasa izoh yozadi yoki rasm yuboradi
+- **Past baho (1–2⭐) darhol egaga boradi** — javob qaytarish imkoni bo'lsin
+- Mijoz `users` jadvaliga yozilmaydi va ismi so'ralmaydi. Baho anonim;
+  aloqa kerak bo'lsa telefonni o'zi qoldiradi
+- Statistika: o'rtacha ball va yulduzlar bo'yicha taqsimot
+
+**Testlar:** 352 ta, hammasi o'tadi.
 
 ---
 
@@ -240,7 +250,7 @@ Bir hisobot yiqilsa qolgani ishlaydi.
 | `inventarizatsiya` | ✅ | ✅ |
 | `moliya` | ✅ | ✅ |
 | `marketing` | ✅ | ✅ |
-| `mijoz` | ✅ | ❌ |
+| `mijoz` | ✅ | ✅ |
 
 `xodimlar` yoqilgan biznesda menyuda ikkita tugma chiqadi (egasi/menejerga),
 xodimga bitta.
@@ -249,19 +259,15 @@ xodimga bitta.
 
 ## Keyingi qadam
 
-**`mijoz` moduli** — QR orqali baho, takliflar va shikoyatlar.
-Oxirgi modul.
+**Katalogdagi barcha modullar yozildi.** Endi haqiqiy mijozda sinov.
 
-Nakladnoyda hali yo'q: katalogda topilmagan mahsulotni **Bito'da yangi
-yaratish** (hozircha faqat tashlab ketiladi). `PUT product/update` da
-`custom_fields` qaytarilishi shart — aks holda PLU o'chadi
-(`LESSONS-MARKET-BOT.md` §2.3).
-
-Shundan keyin katalogdagi barcha modullar yozilgan bo'ladi.
-
-**Sozlamalarda hali yo'q** (xodimlar moduli uchun kerak): ish joyi
-lokatsiyasi, radius, jadval qo'yish oynasi, stavka belgilash, ball berish.
-Hozircha bu qiymatlar faqat kod orqali qo'yiladi.
+Yetishmayotgan qismlar (ehtiyoj paydo bo'lganda):
+- Nakladnoyda katalogda topilmagan mahsulotni Bito'da **yangi yaratish**
+  (hozircha tashlab ketiladi). `PUT product/update` da `custom_fields`
+  qaytarilishi shart — aks holda PLU o'chadi (`LESSONS-MARKET-BOT.md` §2.3)
+- `POST /api/usage` — modul limitlari, BMP tomonida tayyor bo'lgach
+- Takrorlanuvchi vazifalar (`task.repeat_rule` ustuni bor, mantiq yo'q)
+- Ovozli xabar → matn (market-botda Groq Whisper orqali edi)
 
 ---
 
