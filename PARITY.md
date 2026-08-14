@@ -40,8 +40,12 @@ Tartib — do'konga foyda bo'yicha. Yopilganda SHA yoziladi.
    ro'yxati. Filtr parametri variantlari sinaladi, tekshiruv: qaytgan
    qatorlar HAMMASI shu firmaniki (Bito noma'lum parametrni jim
    o'tkazadi); ishlagani keshlanadi, bo'lmasa bruteforce
-3. **🛒 Zarur mahsulotlar** — jamoaviy «tugayapti» ro'yxati, xodim ham
-   qo'shadi. 16647-qator
+3. ~~🛒 Zarur mahsulotlar~~ — **yopildi** (`ombor` da, xodimga ham
+   ochiq). Bito'dan ko'p tanlash yoki ✏️ erkin matn, ⭐ 1–5, kutish
+   muddati. Xodim faqat o'zinikini o'chiradi; xodim qo'shsa rahbarlarga
+   xabar. Fon kuzatuvchisi (30 daq): baseline usuli — birinchi
+   tekshiruvda qoldiq yoziladi, keyin oshsa «keldi», qator o'chadi va
+   qo'shganga xabar
 4. **📋 Vazifa tarixi** + 📊 Vazifa hisoboti (kesimlar). 13579-qator
 5. **📆 Haftalik / 🗓 Muddatli hisobot** — xodimning davriy hisobotlari.
    11288/11308-qator

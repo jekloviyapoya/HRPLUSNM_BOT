@@ -236,3 +236,85 @@ def test_fon_ishi_elon_qilingan(env):
     registry.load()
     jobs = registry.BY_KEY["ombor"].impl.jobs()
     assert jobs and jobs[0][0] == "ombor_scan"
+
+
+# --- zarur mahsulotlar (PARITY 3-band) ---
+
+
+class ZarurClient:
+    """products(search=...) — jonli qoldiq soxtasi."""
+
+    def __init__(self, stock):
+        self.stock = dict(stock)     # pid -> amount
+
+    def products(self, page=1, limit=5, search=None, category_id=None):
+        rows = [{"_id": pid,
+                 "_warehouses": {"w1": {"amount": amount}}}
+                for pid, amount in self.stock.items()]
+        return rows, len(rows)
+
+
+def test_zarur_qoshish_va_tartib(env):
+    o = env["o"]
+    o.zarur_add([{"product_id": "p1", "name": "Cola"}], 2, "Bugun", 111)
+    o.zarur_add([{"product_id": None, "name": "Yangi paket"}], 5, "Ertaga",
+                222)
+    rows = o.zarur_rows()
+    assert [r["name"] for r in rows] == ["Yangi paket", "Cola"]  # ⭐ birinchi
+    text = o.zarur_text()
+    assert "⭐⭐⭐⭐⭐" in text and "✏️" in text and "📦" in text
+
+
+def test_zarur_xodim_faqat_oznikini_ochiradi(env):
+    o = env["o"]
+    users = importlib.import_module("bot.users")
+    env["db"].run("INSERT INTO users (tenant_id, tg_id, name, role) "
+                  "VALUES (?, 555, 'Xodim', 'staff')", (env["ctx"].current(),))
+    env["db"].run("INSERT INTO users (tenant_id, tg_id, name, role) "
+                  "VALUES (?, 777, 'Boshqa', 'staff')", (env["ctx"].current(),))
+    o.zarur_add([{"product_id": None, "name": "Meniki"}], 3, None, 555)
+    row_id = o.zarur_rows()[0]["id"]
+    from bot.errors import BotError
+    with pytest.raises(BotError):
+        o.zarur_delete(row_id, 777)          # boshqa xodim — yo'q
+    assert o.zarur_delete(row_id, 555) == "Meniki"
+
+
+def test_zarur_baseline_birinchi_tekshiruvda_ochirmaydi(env):
+    """Eski qoldiq «keldi» deb adashtirmasin — market-bot qoidasi."""
+    o = env["o"]
+    o.zarur_add([{"product_id": "p1", "name": "Cola"}], 3, None, 111)
+    client = ZarurClient({"p1": 50})
+    arrived = o.zarur_arrival_check(client=client)
+    assert arrived == []                     # faqat baseline yozildi
+    assert o.zarur_rows()[0]["baseline"] == 50
+
+
+def test_zarur_oshsa_keldi_va_xabar(env):
+    o = env["o"]
+    o.zarur_add([{"product_id": "p1", "name": "Cola"}], 3, None, 111)
+    o.zarur_arrival_check(client=ZarurClient({"p1": 50}))    # baseline
+    told = []
+    arrived = o.zarur_arrival_check(client=ZarurClient({"p1": 62}),
+                                    notify=told.append)
+    assert len(arrived) == 1 and arrived[0]["now"] == 62
+    assert told[0]["added_by"] == 111
+    assert o.zarur_rows() == []              # o'chirildi
+
+
+def test_zarur_kamaysa_tegmaydi(env):
+    o = env["o"]
+    o.zarur_add([{"product_id": "p1", "name": "Cola"}], 3, None, 111)
+    o.zarur_arrival_check(client=ZarurClient({"p1": 50}))
+    arrived = o.zarur_arrival_check(client=ZarurClient({"p1": 40}))
+    assert arrived == [] and len(o.zarur_rows()) == 1
+
+
+def test_zarur_bosh_royxat_bitoga_bormaydi(env):
+    o = env["o"]
+
+    class Boom:
+        def products(self, **kw):
+            raise AssertionError("Bito'ga so'rov ketmasligi kerak edi")
+
+    assert o.zarur_arrival_check(client=Boom()) == []

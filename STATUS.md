@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · firma zakazi (PARITY 2-band)
+> Oxirgi yangilanish: 2026-08-14 · zarur mahsulotlar (PARITY 3-band)
 >
 > **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
@@ -336,7 +336,16 @@ almashtirishi so'raladi. Keyin Sozlamalar → Hisob dan istalgan payt.
 - Sotuv tezligi va qoldiq keshdan — Bito'ga faqat xaridlar uchun boriladi
 - Miqdor halol ko'rsatiladi: 0.496 → «0.5», «0» emas (market-bot xatosi)
 
-**Testlar:** 430 ta, hammasi o'tadi.
+**Zarur mahsulotlar (ombor)** — PARITY 3-band
+- Jadval: `zarur` (016-migratsiya). Xodimga ham ochiq — rol tekshiruvidan
+  oldingi shox
+- Baseline qoidasi: qo'shilganda EMAS, birinchi tekshiruvda qoldiq
+  yoziladi — eski qoldiq «keldi» deb adashtirmasin
+- Ro'yxat bo'sh bo'lsa fon ishi Bito'ga umuman bormaydi
+- Fon xabari uchun bot `_register` da modul darajasida saqlanadi
+  (`_NOTIFY_BOT`) — modul jobs() botsiz chaqiriladi
+
+**Testlar:** 436 ta, hammasi o'tadi.
 
 ---
 
