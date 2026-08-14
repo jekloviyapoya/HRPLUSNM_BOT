@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · BMP orqali avto ochish (kontakt tugmasi)
+> Oxirgi yangilanish: 2026-08-14 · nakladnoyda yangi mahsulot yaratish
 >
 > **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
@@ -291,7 +291,17 @@ almashtirishi so'raladi. Keyin Sozlamalar → Hisob dan istalgan payt.
   sinxronlaydi
 - Mavjud hisob egasi kontakt yuborsa — odatdagidek parol so'raladi
 
-**Testlar:** 401 ta, hammasi o'tadi.
+**Nakladnoy: yangi mahsulot yaratish** (`create_in_bito`)
+- Moslashtirish ekranida «➕ Bito'da yangi yaratish» tugmasi. Minimal tana
+  jonli sinovda tasdiqlangan; nom/shtrix-kod qatordan, o'lchov nomdan
+  taxmin qilinadi (kg belgisi bo'lsa kilogram, aks holda dona)
+- SKU: 9 bilan boshlanadigan 8 xonali (vaqt + hisoblagich), to'qnashsa
+  bir marta qayta uriladi
+- PLU yaratishda BERILMAYDI — noto'g'ri tarozi kodi boshqa mahsulotni
+  chiqarib yuborardi; mijozga «narx va PLU ni Bito'da belgilang» deyiladi
+- Yaratilgach keshga yoziladi va qator avtomatik moslashadi
+
+**Testlar:** 406 ta, hammasi o'tadi.
 
 ---
 
@@ -320,9 +330,6 @@ xodimga bitta.
 **Katalogdagi barcha modullar yozildi.** Endi haqiqiy mijozda sinov.
 
 Yetishmayotgan qismlar (ehtiyoj paydo bo'lganda):
-- Nakladnoyda katalogda topilmagan mahsulotni Bito'da **yangi yaratish**
-  (hozircha tashlab ketiladi). `PUT product/update` da `custom_fields`
-  qaytarilishi shart — aks holda PLU o'chadi (`LESSONS-MARKET-BOT.md` §2.3)
 - `POST /api/usage` — modul limitlari, BMP tomonida tayyor bo'lgach
 - Takrorlanuvchi vazifalar (`task.repeat_rule` ustuni bor, mantiq yo'q)
 - Ovozli xabar → matn (market-botda Groq Whisper orqali edi)

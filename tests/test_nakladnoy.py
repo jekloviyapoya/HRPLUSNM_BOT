@@ -360,3 +360,115 @@ def test_tashlab_ketilgan_yuklanmaydi(env):
     state = n.summary(doc_id)
     assert state["matched"] == []
     assert len(state["skipped"]) == 1
+
+
+# --- Bito'da yangi mahsulot yaratish ---
+
+
+class FakeBitoClient:
+    """create_in_bito uchun soxta klient."""
+
+    def __init__(self, fail_sku_times=0):
+        self.bodies = []
+        self.fail_sku_times = fail_sku_times
+
+    def uoms(self):
+        return [
+            {"_id": "U-DONA", "system_code": "piece", "name": "Dona",
+             "short_name": "dona"},
+            {"_id": "U-KG", "system_code": "kilogram", "name": "Kilogram",
+             "short_name": "kg"},
+        ]
+
+    def create_product(self, body, timeout=None):
+        from bot.errors import BitoError
+
+        self.bodies.append(dict(body))
+        if self.fail_sku_times > 0:
+            self.fail_sku_times -= 1
+            raise BitoError("SKU allaqachon mavjud")
+        return {"data": {
+            "_id": "P-YANGI", "name": body["name"], "sku": body["sku"],
+            "barcode": body.get("barcode"), "barcodes": [],
+            "measure": {"_id": body["measure_id"], "short_name": "dona"},
+            "organizations": body["organizations"],
+        }}
+
+
+def _item(env, name="Yangi tovar", barcode=None, qty_unit=None):
+    db = env["db"]
+    db.run("INSERT INTO nak_doc (tenant_id, tg_id, source) VALUES (?, 900, "
+           "'test')", (env["tid"],))
+    doc_id = db.value("SELECT MAX(id) FROM nak_doc WHERE tenant_id = ?",
+                      (env["tid"],))
+    db.run("INSERT INTO nak_item (tenant_id, doc_id, position, raw_name, qty, "
+           "  qty_unit, block_size, price, barcode) "
+           "VALUES (?, ?, 1, ?, 2, ?, 1, 5000, ?)",
+           (env["tid"], doc_id, name, qty_unit, barcode))
+    return db.value("SELECT MAX(id) FROM nak_item WHERE tenant_id = ?",
+                    (env["tid"],))
+
+
+def _with_org(env):
+    importlib.import_module("bot.tenant").set("bito_org_id", "ORG-1")
+
+
+def test_yaratish_minimal_tana_va_moslash(env):
+    n = env["n"]
+    _with_org(env)
+    item_id = _item(env, barcode="4700000099001")
+    client = FakeBitoClient()
+
+    created = n.create_in_bito(item_id, client=client)
+
+    body = client.bodies[0]
+    assert body["organizations"] == [{"organization_id": "ORG-1",
+                                      "is_available": True,
+                                      "is_available_for_sale": True}]
+    assert body["is_product"] and not body["is_material"]
+    assert body["barcode"] == "4700000099001"
+    assert "custom_fields" not in body       # PLU do'kon o'zi qo'yadi
+    assert created["_id"] == "P-YANGI"
+
+    row = env["db"].row("SELECT * FROM nak_item WHERE id = ?", (item_id,))
+    assert row["match_state"] == "topildi"
+    assert row["product_id"] == "P-YANGI"
+    # Kesh: keyingi nakladnoyda avtomatik topiladi
+    assert env["db"].value("SELECT COUNT(*) FROM catalog WHERE tenant_id = ? "
+                           "AND product_id = 'P-YANGI'", (env["tid"],)) == 1
+
+
+def test_yaratish_kg_taniladi(env):
+    n = env["n"]
+    _with_org(env)
+    item_id = _item(env, name="Kartoshka yangi hosil", qty_unit="кг")
+    client = FakeBitoClient()
+    n.create_in_bito(item_id, client=client)
+    assert client.bodies[0]["measure_id"] == "U-KG"
+
+
+def test_yaratish_dona_standart(env):
+    n = env["n"]
+    _with_org(env)
+    item_id = _item(env, name="Coca-Cola 1.5L")
+    client = FakeBitoClient()
+    n.create_in_bito(item_id, client=client)
+    assert client.bodies[0]["measure_id"] == "U-DONA"
+
+
+def test_sku_toqnashsa_qayta_uriladi(env):
+    n = env["n"]
+    _with_org(env)
+    item_id = _item(env)
+    client = FakeBitoClient(fail_sku_times=1)
+    n.create_in_bito(item_id, client=client)
+    assert len(client.bodies) == 2
+    assert client.bodies[0]["sku"] != client.bodies[1]["sku"]
+
+
+def test_org_tanlanmagan_bolsa_xato(env):
+    n = env["n"]
+    item_id = _item(env)
+    from bot.errors import BotError
+    with pytest.raises(BotError):
+        n.create_in_bito(item_id, client=FakeBitoClient())

@@ -109,6 +109,16 @@ ketadi**. Shuning uchun o'qilgan qiymat o'zgartirilmasdan qaytariladi.
 **Umumiy qoida:** Bito'da yangilashdan oldin obyektni o'qib, o'zgarmagan
 maydonlarni qaytarib yuborish shart.
 
+### 2.3a `PUT product/update` HAMMA maydonni almashtiradi (jonli tasdiq)
+
+2026-08-14 jonli sinov: yangilashda `barcode` yuborilmagan edi — mahsulot
+shtrix-kodi **null bo'lib o'chdi**. Ya'ni to'liq almashtirish faqat
+`custom_fields` ga emas, *har bir* ixtiyoriy maydonga tegishli.
+
+Yaratishda esa (`POST product/create`): `barcode` topda yuboriladi,
+`barcodes[]` bo'sh qolsa ham skaner qidiruvi (`get-by-barcode`) ishlaydi.
+PLU shakli: `custom_fields: [{"_id": <ta'rif id>, "value": <raqam>}]`.
+
 ### 2.4 `sales/by-item-pagin` faqat sotilganlarni beradi
 
 Umuman sotilmagan mahsulotlar bu hisobotda **yo'q**. «Turib qolganlar»

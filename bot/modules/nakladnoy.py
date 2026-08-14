@@ -21,6 +21,7 @@ aylantirilmaydi — faqat block_size aniqlanadi.
 """
 
 import io
+import itertools
 import logging
 
 from . import base, nak_prompt, registry
@@ -308,6 +309,93 @@ def skip_item(item_id):
            "WHERE tenant_id = ? AND id = ?", (ctx.require(), item_id))
 
 
+# ------------------------------------------------- yangi mahsulot yaratish
+
+_KG_HINTS = ("kg", "кг", "кг.", "килограмм", "kilogram")
+
+
+def _looks_kg(name, qty_unit=None):
+    text = f"{name or ''} {qty_unit or ''}".lower()
+    return any(hint in text.split() or text.endswith(hint)
+               for hint in _KG_HINTS)
+
+
+_sku_seq = itertools.count()
+
+
+def _new_sku():
+    """Bito'da SKU majburiy va unikal. Do'kondagi raqamlar bilan
+    to'qnashmasligi uchun 9 bilan boshlanadigan 8 xonali raqam: vaqt +
+    hisoblagich (bir soniya ichida ham takrorlanmasin). To'qnashsa
+    chaqiruvchi qayta uradi."""
+    import time
+
+    return f"9{(int(time.time() * 10) + next(_sku_seq)) % 10_000_000:07d}"
+
+
+def create_in_bito(item_id, client=None):
+    """Nakladnoy qatoridan Bito'da yangi mahsulot yaratadi.
+
+    Jonli sinov saboqlari (2026-08-14, mijoz Bito'sida):
+    - `organizations` kamida bitta obyekt bilan majburiy; qolgan
+      maydonlarni (amount, standard...) server o'zi to'ldiradi
+    - `barcode` topda yuboriladi, `barcodes[]` bo'sh qolsa ham skaner
+      qidiruvi ishlaydi
+    - PLU (custom_fields) yaratishda BERILMAYDI — tarozi kodini do'kon
+      Bito'da o'zi belgilaydi; noto'g'ri PLU tarozida boshqa mahsulotni
+      chiqarib yuboradi
+    """
+    row = db.row("SELECT * FROM nak_item WHERE tenant_id = ? AND id = ?",
+                 (ctx.require(), item_id))
+    if not row:
+        raise BotError("Qator topilmadi.")
+    organization = tenant.get("bito_org_id")
+    if not organization:
+        raise BotError("Bito tashkiloti tanlanmagan — Sozlamalarga kiring.")
+
+    client = client or bito.client()
+    uoms = client.uoms()
+    if _looks_kg(row["raw_name"], row["qty_unit"]):
+        uom = bito.pick_uom(uoms, "kilogram", ("kg", "Kilogram"))
+    else:
+        uom = bito.pick_uom(uoms, "piece", ("dona", "Dona", "sht", "шт"))
+    if not uom:
+        raise BotError("Bito'da o'lchov birligi topilmadi.")
+
+    body = {
+        "name": (row["raw_name"] or "").strip()[:120],
+        "measure_id": str(uom["_id"] if isinstance(uom, dict) else uom),
+        "organizations": [{
+            "organization_id": str(organization),
+            "is_available": True,
+            "is_available_for_sale": True,
+        }],
+        "is_product": True,
+        "is_material": False,
+        "is_semi_product": False,
+        "is_marked": False,
+    }
+    if row["barcode"]:
+        body["barcode"] = str(row["barcode"])
+
+    created = None
+    for _attempt in range(2):          # SKU to'qnashsa bir marta qayta
+        body["sku"] = _new_sku()
+        try:
+            created = bito.unwrap(client.create_product(body))
+            break
+        except bito.BitoError as e:
+            if "sku" not in str(e).lower() or _attempt:
+                raise
+    pid = str((created or {}).get("_id") or "")
+    if not pid:
+        raise BotError("Bito mahsulotni qaytarmadi — qayta uring.")
+
+    catalog.upsert(created)
+    set_match(item_id, pid, created.get("name"))
+    return created
+
+
 def find_supplier(name, client=None):
     """Hujjatdagi firma nomiga Bito'dan mos keluvchini topadi."""
     if not name:
@@ -367,6 +455,26 @@ def _register(bot, guard):
         elif action.startswith("tanla"):
             _, item_id, product_id = action.split("_", 2)
             _pick(bot, chat_id, tg_id, int(item_id), product_id)
+        elif action.startswith("yarat"):
+            item_id = int(action.split("_", 1)[1])
+            users.require_role(tg_id, "manager")
+            note = bot.send_message(chat_id, "Bito'da yaratilmoqda…")
+            created = create_in_bito(item_id)
+            try:
+                bot.delete_message(chat_id, note.message_id)
+            except Exception:  # noqa: BLE001
+                pass
+            bot.send_message(
+                chat_id,
+                f"✅ Yaratildi va tanlandi: "
+                f"<b>{ui.escape(created.get('name') or '')}</b>\n"
+                f"SKU: <code>{ui.escape(str(created.get('sku') or ''))}</code>\n\n"
+                "Sotish narxi va PLU (tarozi kodi) ni Bito'da belgilang — "
+                "narx 0 bo'lib turibdi.",
+                parse_mode="HTML")
+            row = db.row("SELECT doc_id FROM nak_item WHERE tenant_id = ? "
+                         "AND id = ?", (ctx.require(), item_id))
+            _next_pending(bot, chat_id, tg_id, row["doc_id"])
         elif action.startswith("tashla"):
             item_id = int(action.split("_", 1)[1])
             skip_item(item_id)
@@ -633,6 +741,8 @@ def _next_pending(bot, chat_id, tg_id, doc_id):
     else:
         lines.append("")
         lines.append("Katalogdan o'xshash mahsulot topilmadi.")
+    buttons.append(("➕ Bito'da yangi yaratish",
+                    f"mod:nakladnoy:yarat_{row['id']}"))
     buttons.append(("⏭ Tashlab ketish", f"mod:nakladnoy:tashla_{row['id']}"))
 
     bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML",

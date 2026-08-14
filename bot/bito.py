@@ -44,6 +44,10 @@ PATHS = {
     ],
     "currencies": ["currency/get-all", "currencies/get-all"],
     "products": ["product/get-paging", "products/get-paging"],
+    # DIQQAT (2026-08-14, jonli sinov): javobda `barcode` maydoni bor,
+    # lekin `barcodes[]` bo'sh qoladi — skaner qidiruvi baribir ishlaydi.
+    # PLU: custom_fields=[{"_id": <ta'rif id>, "value": <raqam>}]
+    "product_create": ["product/create", "products/create"],
     "product_by_barcode": ["product/get-by-barcode", "products/get-by-barcode"],
     "suppliers": ["supplier/get-paging", "suppliers/get-paging"],
     "purchase_create": ["purchase/create", "purchases/create"],
@@ -355,6 +359,12 @@ class Bito:
 
     def suppliers(self, page=1, limit=MAX_LIMIT, search=None):
         return self.paged("suppliers", page=page, limit=limit, search=search)
+
+    def create_product(self, body, timeout=None):
+        """Yangi mahsulot. Majburiy: name, sku, measure_id, organizations,
+        is_product/is_material/is_semi_product/is_marked (jonli sinovda tasdiqlangan, 2026-08-14)."""
+        return self.raw(self.resolve("product_create"), "POST", json=body,
+                        timeout=timeout or 30)
 
     def create_purchase(self, body, timeout=None):
         """Kirim yaratadi. Javob obyektini QAYTARADI, xato tashlamaydi.
