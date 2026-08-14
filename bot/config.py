@@ -37,7 +37,27 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or ""
 
 # --- Litsenziya serveri (BMP-BOTLAR) ---
 # Bo'sh bo'lsa: mahalliy sinov muddati ishlaydi, markaz so'ralmaydi.
-LICENSE_SERVER_URL = (os.getenv("LICENSE_SERVER_URL") or "").strip()
+
+
+def _license_url():
+    """BMP `LICENSE_API=.../api/check` deb beradi, kod esa yo'lni o'zi qo'shadi.
+
+    Ikkala nom ham qabul qilinadi va yo'l qismi kesib tashlanadi — aks holda
+    so'rov `/api/check/api/check` ga ketardi.
+    """
+    raw = (os.getenv("LICENSE_SERVER_URL") or os.getenv("LICENSE_API")
+           or "").strip().rstrip("/")
+    for suffix in ("/api/check", "/api"):
+        if raw.endswith(suffix):
+            return raw[: -len(suffix)]
+    return raw
+
+
+LICENSE_SERVER_URL = _license_url()
+
+# Bitta do'kon uchun alohida deploy qilinganda kalitni env'da berish mumkin.
+# Ko'p ijarachi rejimda ishlatilmaydi — u yerda har biznesning o'z kaliti bor.
+LICENSE_KEY = (os.getenv("LICENSE_KEY") or "").strip()
 LICENSE_BOT_USERNAME = (os.getenv("LICENSE_BOT_USERNAME") or "").strip()
 LICENSE_CHECK_MINUTES = _int("LICENSE_CHECK_MINUTES", 15)
 

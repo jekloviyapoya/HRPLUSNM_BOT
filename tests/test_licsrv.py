@@ -177,3 +177,99 @@ def test_scrub_boshqa_shakllarni_ham_tozalaydi(mod):
     scrub = mod["licsrv"].scrub
     assert "abc" not in scrub("url?key=abc&bot=x", "abc")
     assert scrub("key=zzz", None) == "key=***"
+
+
+# ------------------------------------------------- env nomlari va bootstrap
+
+
+def _reload(monkeypatch, tmp_path, **env):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "b.db"))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
+    monkeypatch.setenv("SAAS_OWNER_ID", "111")
+    for name in ("LICENSE_SERVER_URL", "LICENSE_API", "LICENSE_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    for name in list(sys.modules):
+        if name == "bot" or name.startswith("bot."):
+            del sys.modules[name]
+    return importlib.import_module("bot.config")
+
+
+def test_license_api_aliasi_qabul_qilinadi(monkeypatch, tmp_path):
+    """BMP `LICENSE_API=.../api/check` beradi. Yo'l ikki marta qo'shilmasin."""
+    config = _reload(monkeypatch, tmp_path,
+                     LICENSE_API="https://web.up.railway.app/api/check")
+    assert config.LICENSE_SERVER_URL == "https://web.up.railway.app"
+
+    licsrv = importlib.import_module("bot.licsrv")
+    lic = importlib.import_module("bot.license")
+    db = importlib.import_module("bot.db")
+    db.migrate()
+    ctx = importlib.import_module("bot.ctx")
+    tenants = importlib.import_module("bot.tenants")
+    ctx.set(tenants.create(7))
+    lic.set_key("GB-1")
+
+    http = FakeHTTP(FakeResponse(200, {
+        "status": "active", "expires_at": "2026-12-31", "days_left": 100,
+    }))
+    lic.sync(session=http)
+    assert http.calls[0][0] == "https://web.up.railway.app/api/check"
+    assert licsrv.base_url() == "https://web.up.railway.app"
+
+
+def test_server_url_ustunroq(monkeypatch, tmp_path):
+    config = _reload(monkeypatch, tmp_path,
+                     LICENSE_SERVER_URL="https://aniq.example",
+                     LICENSE_API="https://eski.example/api/check")
+    assert config.LICENSE_SERVER_URL == "https://aniq.example"
+
+
+def test_bootstrap_yagona_bizneega_qoyadi(monkeypatch, tmp_path):
+    _reload(monkeypatch, tmp_path, LICENSE_API="https://x.invalid",
+            LICENSE_KEY="GB-ENV")
+    db = importlib.import_module("bot.db")
+    db.migrate()
+    ctx = importlib.import_module("bot.ctx")
+    tenants = importlib.import_module("bot.tenants")
+    lic = importlib.import_module("bot.license")
+    tid = tenants.create(7)
+
+    assert lic.bootstrap_key() == tid
+    with ctx.scope(tid):
+        assert lic.record()["license_key"] == "GB-ENV"
+
+
+def test_bootstrap_kop_biznesda_tegmaydi(monkeypatch, tmp_path):
+    """Kalit qaysi biznesniki ekani noma'lum — taxmin qilinmaydi."""
+    _reload(monkeypatch, tmp_path, LICENSE_API="https://x.invalid",
+            LICENSE_KEY="GB-ENV")
+    db = importlib.import_module("bot.db")
+    db.migrate()
+    ctx = importlib.import_module("bot.ctx")
+    tenants = importlib.import_module("bot.tenants")
+    lic = importlib.import_module("bot.license")
+    first, second = tenants.create(7), tenants.create(8)
+
+    assert lic.bootstrap_key() is None
+    for tid in (first, second):
+        with ctx.scope(tid):
+            assert lic.record()["license_key"] is None
+
+
+def test_bootstrap_mavjud_kalitni_bosmaydi(monkeypatch, tmp_path):
+    _reload(monkeypatch, tmp_path, LICENSE_API="https://x.invalid",
+            LICENSE_KEY="GB-ENV")
+    db = importlib.import_module("bot.db")
+    db.migrate()
+    ctx = importlib.import_module("bot.ctx")
+    tenants = importlib.import_module("bot.tenants")
+    lic = importlib.import_module("bot.license")
+    tid = tenants.create(7)
+    with ctx.scope(tid):
+        lic.set_key("GB-QOLDA")
+
+    assert lic.bootstrap_key() is None
+    with ctx.scope(tid):
+        assert lic.record()["license_key"] == "GB-QOLDA"

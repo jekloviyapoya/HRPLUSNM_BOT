@@ -11,7 +11,7 @@ import threading
 import telebot
 from waitress import serve
 
-from bot import config, db, handlers, jobs
+from bot import config, db, handlers, jobs, license
 from bot.modules import registry
 from bot.webapp import create_app
 
@@ -39,6 +39,7 @@ def main():
     applied = db.migrate()
     log.info("Migratsiyalar: %s", applied or "yangisi yo'q")
     registry.load()
+    license.bootstrap_key()
 
     threading.Thread(target=_serve_web, daemon=True, name="web").start()
 

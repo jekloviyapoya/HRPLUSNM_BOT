@@ -208,6 +208,36 @@ def clear_key():
     )
 
 
+def bootstrap_key():
+    """`LICENSE_KEY` env'i bo'lsa — yagona biznesga o'rnatadi.
+
+    Faqat bitta do'kon uchun alohida deploy qilingan holat uchun. Bazada
+    bir nechta biznes bo'lsa hech narsa qilinmaydi: qaysi biriga tegishli
+    ekani noma'lum, xato tenantga o'zganing obunasini bog'lab qo'yish
+    mumkin emas.
+
+    Kalit allaqachon o'rnatilgan bo'lsa qayta yozilmaydi — mijoz yoki
+    sotuvchi keyinroq boshqasini kiritgan bo'lishi mumkin.
+    """
+    if not config.LICENSE_KEY:
+        return None
+    ids = [row["id"] for row in db.rows("SELECT id FROM tenant WHERE active = 1")]
+    if len(ids) != 1:
+        if ids:
+            log.warning(
+                "LICENSE_KEY env'da bor, lekin bazada %s ta biznes — "
+                "e'tiborsiz qoldirildi. Har biznesga /set_key bilan qo'ying.",
+                len(ids),
+            )
+        return None
+    with ctx.scope(ids[0]):
+        if record()["license_key"]:
+            return None
+        set_key(config.LICENSE_KEY)
+    log.info("LICENSE_KEY env'dan o'rnatildi: tenant=%s", ids[0])
+    return ids[0]
+
+
 def _hours_offline():
     since = record()["offline_since"]
     if not since:

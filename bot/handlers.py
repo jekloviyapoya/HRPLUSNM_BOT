@@ -484,6 +484,73 @@ def register(bot):
             "Mijoz birinchi kirishda uni o'zgartirishi so'raladi.",
             parse_mode="HTML")
 
+    @bot.message_handler(commands=["set_key"])
+    @safe
+    def _set_key(message):
+        """Litsenziya kalitini sotuvchi qo'yadi — mijoz kalitni ko'rmaydi."""
+        if not users.is_seller(message.from_user.id):
+            return
+        parts = (message.text or "").split()
+        if len(parts) < 3:
+            bot.send_message(
+                message.chat.id,
+                "Ishlatilishi: /set_key <biznes_id> <kalit>\n\n"
+                "O'chirish: /set_key <biznes_id> -")
+            return
+        try:
+            tenant_id = int(parts[1])
+        except ValueError:
+            bot.send_message(message.chat.id, "Biznes ID raqam bo'lishi kerak.")
+            return
+        if not db.row("SELECT id FROM tenant WHERE id = ?", (tenant_id,)):
+            bot.send_message(message.chat.id, f"#{tenant_id} topilmadi.")
+            return
+
+        key = parts[2]
+        with ctx.scope(tenant_id):
+            previous = license.record()["license_key"]
+            if key == "-":
+                license.clear_key()
+                bot.send_message(
+                    message.chat.id,
+                    f"#{tenant_id}: kalit olib tashlandi, mahalliy hisobga "
+                    "qaytdi.")
+                return
+
+            license.set_key(key)
+            try:
+                license.sync()
+            except Exception:  # noqa: BLE001 — eski holatni tiklab, xatoni bermiz
+                license.clear_key()
+                if previous:
+                    license.set_key(previous)
+                raise
+
+            if license.record()["remote_status"] == "invalid":
+                license.clear_key()
+                if previous:
+                    license.set_key(previous)
+                bot.send_message(
+                    message.chat.id,
+                    "⚠️ Server bu kalitni tanimadi. BMP'da tekshiring.")
+                return
+
+            summary = license.summary()
+            enabled_keys = modules.list_enabled()
+            name = tenant.shop_name()
+
+        titles = [registry.BY_KEY[k].title for k in enabled_keys
+                  if k in registry.BY_KEY]
+        bot.send_message(
+            message.chat.id,
+            f"✅ #{tenant_id} {ui.escape(name)} — kalit o'rnatildi\n\n"
+            f"{summary}\n\n"
+            f"Modullar ({len(titles)}): "
+            + (", ".join(titles) if titles else "yo'q"),
+            parse_mode="HTML")
+        bot.send_message(message.chat.id,
+                         "Kalit yozilgan xabaringizni o'chirib tashlang.")
+
     @bot.message_handler(commands=["set_bito"])
     @safe
     def _set_bito(message):

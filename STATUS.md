@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `25b8d25` + market-bot tuzatishlari
+> Oxirgi yangilanish: 2026-08-14 · litsenziya env nomlari + `/set_key`
 >
 > **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
@@ -238,6 +238,9 @@ Mijoz **o'zi biznes ocholmaydi**. Sotuvchi hisob yaratadi:
 - `/new_client +998901234567 [nom]` → telefon va parol chiqadi
 - `/set_bito <id> <kalit>` → Bito ulanadi, tashkilot/ombor/narx avtomatik
   tanlanadi (yagona variant bo'lsa)
+- `/set_key <id> <kalit>` → litsenziya kaliti. **Mijoz kalitni ko'rmaydi** —
+  BMP «kalitni mijozga bermang» deydi. Kalit darhol tekshiriladi; server
+  tanimasa eski kalit tiklanadi. `-` bilan olib tashlanadi
 - `/reset_password <id>` → parol unutilganda
 
 Mijoz botga telefon + parol bilan kiradi va birinchi kirishda parolni
@@ -262,7 +265,17 @@ almashtirishi so'raladi. Keyin Sozlamalar → Hisob dan istalgan payt.
 - **Chegirmasiz post «aksiya» emas** — «chegirma», «arzon» so'zlari
   ishlatilmaydi, faqat «Narxi»
 
-**Testlar:** 389 ta, hammasi o'tadi.
+**Litsenziya env nomlari** (`bot/config.py`)
+- BMP `LICENSE_API=https://.../api/check` deb beradi, kod esa `/api/check`
+  ni o'zi qo'shadi. **Ikkala nom ham qabul qilinadi**, yo'l qismi kesiladi —
+  aks holda so'rov `/api/check/api/check` ga ketardi
+- `LICENSE_SERVER_URL` berilgan bo'lsa u ustunroq
+- `LICENSE_KEY` — faqat **bitta do'kon uchun alohida deploy** qilinganda.
+  Bazada bir nechta biznes bo'lsa e'tiborsiz qoldiriladi va logga yoziladi:
+  kalit qaysi biznesniki ekani noma'lum, taxmin qilinmaydi
+- Mavjud kalit env bilan qayta yozilmaydi
+
+**Testlar:** 394 ta, hammasi o'tadi.
 
 ---
 
