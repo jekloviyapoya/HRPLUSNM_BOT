@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · nakladnoyda yangi mahsulot yaratish
+> Oxirgi yangilanish: 2026-08-14 · takrorlanuvchi vazifalar
 >
 > **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
@@ -301,7 +301,16 @@ almashtirishi so'raladi. Keyin Sozlamalar → Hisob dan istalgan payt.
   chiqarib yuborardi; mijozga «narx va PLU ni Bito'da belgilang» deyiladi
 - Yaratilgach keshga yoziladi va qator avtomatik moslashadi
 
-**Testlar:** 406 ta, hammasi o'tadi.
+**Takrorlanuvchi vazifalar** (`spawn_next`, `spawn_recurring`)
+- Yaratishda muddatdan keyin savol: bir martalik / har kuni / har hafta.
+  Takror muddatsiz bo'lmaydi — bo'sh bo'lsa bugun 18:00 qo'yiladi
+- «Bajarildi» → davomchi darhol; muddati o'tgan ochiq vazifa → fon ishi
+  (15 daq) davomchini ochadi, eskisi ochiq qoladi (qarzdorlik ko'rinadi)
+- «Bekor» zanjirni to'xtatadi — takrorni o'chirish yo'li shu
+- O'tkazib yuborilgan kunlar uchun BITTA davomchi (muddati kelajakka
+  suriladi); parent_id tekshiruvi tufayli davomchi hech qachon ikkitalanmaydi
+
+**Testlar:** 413 ta, hammasi o'tadi.
 
 ---
 
@@ -331,7 +340,6 @@ xodimga bitta.
 
 Yetishmayotgan qismlar (ehtiyoj paydo bo'lganda):
 - `POST /api/usage` — modul limitlari, BMP tomonida tayyor bo'lgach
-- Takrorlanuvchi vazifalar (`task.repeat_rule` ustuni bor, mantiq yo'q)
 - Ovozli xabar → matn (market-botda Groq Whisper orqali edi)
 
 ---

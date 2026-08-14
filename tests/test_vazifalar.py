@@ -267,3 +267,99 @@ def test_boshqa_xodim_vazifasi_yetkazilmaydi(env):
     v = env["v"]
     v.create("Valining ishi", created_by=30, assigned_to=21)
     assert v.pending_for(20) == []
+
+
+# --- takrorlanuvchi vazifalar ---
+
+
+def _repeat_task(env, rule="kunlik", due_shift_days=0, status="yangi"):
+    v = env["v"]
+    import datetime as dt
+    due = (v.now() + dt.timedelta(days=due_shift_days)).isoformat(
+        timespec="minutes")
+    task_id = v.create("Pol yuvish", created_by=111, assigned_to=222,
+                       due=due, points=2, repeat_rule=rule)
+    if status != "yangi":
+        env["db"].run("UPDATE task SET status = ? WHERE id = ?",
+                      (status, task_id))
+    return task_id
+
+
+def test_bajarilganda_keyingisi_ochiladi(env):
+    v = env["v"]
+    task_id = _repeat_task(env, due_shift_days=0)
+    env["db"].run("UPDATE task SET status = 'bajarildi' WHERE id = ?",
+                  (task_id,))
+    next_id = v.spawn_next(task_id)
+    assert next_id
+    child = v.get(next_id)
+    assert child["parent_id"] == task_id
+    assert child["repeat_rule"] == "kunlik"
+    assert child["assigned_to"] == 222
+    assert child["status"] == "yangi"
+    assert child["due_at"] > v.now().isoformat(timespec="minutes")
+
+
+def test_davomchi_faqat_bitta(env):
+    """approve ham, fon ishi ham chaqirsa — nusxa ikkitalanmaydi."""
+    v = env["v"]
+    task_id = _repeat_task(env)
+    env["db"].run("UPDATE task SET status = 'bajarildi' WHERE id = ?",
+                  (task_id,))
+    assert v.spawn_next(task_id)
+    assert v.spawn_next(task_id) is None
+    assert env["db"].value(
+        "SELECT COUNT(*) FROM task WHERE parent_id = ?", (task_id,)) == 1
+
+
+def test_bekor_zanjirni_toxtatadi(env):
+    v = env["v"]
+    task_id = _repeat_task(env)
+    env["db"].run("UPDATE task SET status = 'bekor' WHERE id = ?", (task_id,))
+    assert v.spawn_next(task_id) is None
+    assert v.spawn_recurring() == []
+
+
+def test_otkazib_yuborilgan_kunlar_bitta_nusxa(env):
+    """3 kun o'tib ketgan kunlik vazifa — UCHTA emas, BITTA davomchi,
+    muddati kelajakda."""
+    v = env["v"]
+    task_id = _repeat_task(env, due_shift_days=-3)
+    spawned = v.spawn_recurring()
+    assert len(spawned) == 1
+    child = v.get(spawned[0])
+    assert child["due_at"] > v.now().isoformat(timespec="minutes")
+    import datetime as dt
+    gap = (dt.datetime.fromisoformat(child["due_at"]) - v.now())
+    assert gap <= dt.timedelta(days=1)
+
+
+def test_haftalik_yetti_kun(env):
+    v = env["v"]
+    task_id = _repeat_task(env, rule="haftalik", due_shift_days=0)
+    env["db"].run("UPDATE task SET status = 'bajarildi' WHERE id = ?",
+                  (task_id,))
+    child = v.get(v.spawn_next(task_id))
+    import datetime as dt
+    parent = v.get(task_id)
+    diff = (dt.datetime.fromisoformat(child["due_at"])
+            - dt.datetime.fromisoformat(parent["due_at"]))
+    assert diff == dt.timedelta(days=7)
+
+
+def test_muddati_otgan_ochiq_vazifa_ham_davom_etadi(env):
+    """Kecha qilinmagan yumush bugun ham paydo bo'ladi; eskisi ochiq qoladi."""
+    v = env["v"]
+    task_id = _repeat_task(env, due_shift_days=-1)          # ochiq, kechikkan
+    spawned = v.spawn_recurring()
+    assert len(spawned) == 1
+    parent = v.get(task_id)
+    assert parent["status"] == "yangi"                       # yopilmadi
+
+
+def test_oddiy_vazifa_takrorlanmaydi(env):
+    v = env["v"]
+    task_id = v.create("Bir martalik", created_by=111)
+    env["db"].run("UPDATE task SET status = 'bajarildi' WHERE id = ?",
+                  (task_id,))
+    assert v.spawn_next(task_id) is None

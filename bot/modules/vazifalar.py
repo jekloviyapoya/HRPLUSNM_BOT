@@ -288,7 +288,82 @@ class Vazifalar(base.Module):
         _register(bot, guard)
 
     def jobs(self):
-        return [("vazifa_muddat", lambda: check_overdue(), 900)]
+        return [("vazifa_muddat", lambda: check_overdue(), 900),
+                ("vazifa_takror", lambda: spawn_recurring(), 900)]
+
+
+
+# ------------------------------------------------- takrorlanuvchi vazifalar
+#
+# Qoidalar:
+# - «bajarildi» → keyingi nusxa darhol ochiladi
+# - muddati o'tib ketsa (bajarilmagan bo'lsa ham) → fon ishi keyingisini
+#   ochadi: kundalik yumush «kecha qilinmadi» deb yo'qolmaydi, eski nusxa
+#   esa ochiq qoladi — menejer qarzdorlikni ko'radi
+# - «bekor» zanjirni TO'XTATADI — takrorni o'chirish yo'li shu
+# - har vazifadan faqat bitta davomchi (parent_id bilan tekshiriladi),
+#   shuning uchun approve + fon ishi ikkalasi chaqirsa ham nusxa bitta
+
+REPEAT_STEP = {"kunlik": dt.timedelta(days=1),
+               "haftalik": dt.timedelta(days=7)}
+
+
+def _advance_due(due_iso, rule):
+    """Keyingi muddat: davr qo'shib, kelajakka chiqquncha suriladi.
+
+    Uch kun o'tkazib yuborilgan kunlik vazifa uchun UCHTA emas, BITTA
+    nusxa ochiladi — muddati bugungi.
+    """
+    step = REPEAT_STEP[rule]
+    try:
+        due = dt.datetime.fromisoformat(due_iso)
+    except (TypeError, ValueError):
+        due = now().replace(hour=18, minute=0)
+    due += step
+    while due <= now():
+        due += step
+    return due.isoformat(timespec="minutes")
+
+
+def spawn_next(task_id):
+    """Takrorlanuvchi vazifaning keyingi nusxasini ochadi.
+
+    Qaytadi: yangi id yoki None (takror emas / bekor / davomchi bor).
+    """
+    task = get(task_id)
+    if not task or task["repeat_rule"] not in REPEAT_STEP:
+        return None
+    if task["status"] == "bekor":
+        return None
+    if db.value("SELECT id FROM task WHERE tenant_id = ? AND parent_id = ?",
+                (ctx.require(), task_id)):
+        return None
+
+    due = _advance_due(task["due_at"], task["repeat_rule"])
+    cur = db.run(
+        "INSERT INTO task (tenant_id, title, details, photo_id, assigned_to, "
+        "  created_by, due_at, points, repeat_rule, parent_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (ctx.require(), task["title"], task["details"], task["photo_id"],
+         task["assigned_to"], task["created_by"], due, task["points"],
+         task["repeat_rule"], task_id),
+    )
+    return cur.lastrowid
+
+
+def spawn_recurring():
+    """Fon ishi: yopilgan yoki muddati o'tgan takrorlarga davomchi ochadi."""
+    rows = db.rows(
+        "SELECT id FROM task WHERE tenant_id = ? "
+        "AND repeat_rule IS NOT NULL AND status != 'bekor' "
+        "AND id NOT IN (SELECT parent_id FROM task WHERE tenant_id = ? "
+        "               AND parent_id IS NOT NULL) "
+        "AND (status = 'bajarildi' "
+        "     OR (due_at IS NOT NULL AND due_at < ?))",
+        (ctx.require(), ctx.require(),
+         now().isoformat(timespec="minutes")),
+    )
+    return [sid for row in rows if (sid := spawn_next(row["id"]))]
 
 
 def check_overdue(notify=None):
@@ -336,10 +411,37 @@ def _register(bot, guard):
             sessions.set(tg_id, "vaz:hisobot", {"task_id": task_id})
             bot.send_message(chat_id, "Bajarilgani haqida yozing yoki rasm "
                                       "yuboring.")
+        elif action.startswith("takror_"):
+            users.require_role(tg_id, "manager")
+            _, task_id, rule = action.split("_", 2)
+            task_id = int(task_id)
+            if rule in REPEAT_STEP:
+                task = get(task_id)
+                if task and not task["due_at"]:
+                    # Takror muddatsiz bo'lmaydi — standart: bugun 18:00
+                    db.run("UPDATE task SET due_at = ? WHERE tenant_id = ? "
+                           "AND id = ?",
+                           (now().replace(hour=18, minute=0)
+                            .isoformat(timespec="minutes"),
+                            ctx.require(), task_id))
+                db.run("UPDATE task SET repeat_rule = ? WHERE tenant_id = ? "
+                       "AND id = ?", (rule, ctx.require(), task_id))
+                bot.send_message(chat_id,
+                                 "🔁 Har " + ("kuni" if rule == "kunlik"
+                                              else "hafta")
+                                 + " takrorlanadi. To'xtatish: vazifani "
+                                   "bekor qilish.")
+            _ask_assignee(bot, chat_id, task_id)
         elif action.startswith("tasdiq_"):
             task = approve(int(action.split("_")[1]), tg_id)
             bot.send_message(chat_id, f"✅ Tasdiqlandi. "
                                       f"{task['points']} ball berildi.")
+            next_id = spawn_next(task["id"])
+            if next_id:
+                fresh = get(next_id)
+                bot.send_message(chat_id,
+                                 f"🔁 Keyingisi ochildi — muddat: "
+                                 f"{due_text(fresh)}")
             if task["assigned_to"]:
                 _tell(bot, task["assigned_to"],
                       f"✅ «{task['title']}» tasdiqlandi. "
@@ -402,14 +504,13 @@ def _apply(bot, message, state, data):
         due = _parse_due(text)
         db.run("UPDATE task SET due_at = ? WHERE tenant_id = ? AND id = ?",
                (due, ctx.require(), task_id))
-        rows = users.listing()
+        sessions.clear(tg_id)
         bot.send_message(
-            chat_id, "Kimga beriladi?",
+            chat_id, "Takrorlansinmi?",
             reply_markup=ui.buttons(
-                [("👥 Hammaga", f"mod:vazifalar:kim_{task_id}_hamma")]
-                + [(ui.escape(r["name"] or "—"),
-                    f"mod:vazifalar:kim_{task_id}_{r['tg_id']}")
-                   for r in rows if r["role"] != "owner"],
+                [("Yo'q — bir martalik", f"mod:vazifalar:takror_{task_id}_yoq"),
+                 ("🔁 Har kuni", f"mod:vazifalar:takror_{task_id}_kunlik"),
+                 ("🔁 Har hafta", f"mod:vazifalar:takror_{task_id}_haftalik")],
                 row_width=1))
         return
 
@@ -497,12 +598,25 @@ def _my_tasks(bot, chat_id, tg_id):
                                              back="menu:root"))
 
 
+def _ask_assignee(bot, chat_id, task_id):
+    rows = users.listing()
+    bot.send_message(
+        chat_id, "Kimga beriladi?",
+        reply_markup=ui.buttons(
+            [("👥 Hammaga", f"mod:vazifalar:kim_{task_id}_hamma")]
+            + [(ui.escape(r["name"] or "—"),
+                f"mod:vazifalar:kim_{task_id}_{r['tg_id']}")
+               for r in rows if r["role"] != "owner"],
+            row_width=1))
+
+
 def _card(bot, chat_id, tg_id, task_id):
     task = get(task_id)
     if not task:
         bot.send_message(chat_id, "Vazifa topilmadi.")
         return
-    lines = [f"<b>{ui.escape(task['title'])}</b>",
+    lines = [f"<b>{ui.escape(task['title'])}</b>"
+             + (" 🔁" if task["repeat_rule"] else ""),
              f"Holat: {STATUS_LABELS[task['status']]}",
              f"Muddat: {due_text(task)}",
              f"Ball: {task['points']}"]
