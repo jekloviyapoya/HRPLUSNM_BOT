@@ -23,8 +23,8 @@ class FakeHTTP:
         self.boom = boom
         self.calls = []
 
-    def get(self, url, params=None, timeout=None):
-        self.calls.append((url, dict(params or {})))
+    def get(self, url, params=None, timeout=None, headers=None):
+        self.calls.append((url, dict(params or {}), dict(headers or {})))
         if self.boom:
             raise self.boom
         return self.response
@@ -186,7 +186,8 @@ def _reload(monkeypatch, tmp_path, **env):
     monkeypatch.setenv("DB_PATH", str(tmp_path / "b.db"))
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
     monkeypatch.setenv("SAAS_OWNER_ID", "111")
-    for name in ("LICENSE_SERVER_URL", "LICENSE_API", "LICENSE_KEY"):
+    for name in ("LICENSE_SERVER_URL", "LICENSE_API", "LICENSE_KEY",
+                 "LICENSE_PROVISION_TOKEN"):
         monkeypatch.delenv(name, raising=False)
     for name, value in env.items():
         monkeypatch.setenv(name, value)
@@ -273,3 +274,130 @@ def test_bootstrap_mavjud_kalitni_bosmaydi(monkeypatch, tmp_path):
     assert lic.bootstrap_key() is None
     with ctx.scope(tid):
         assert lic.record()["license_key"] == "GB-QOLDA"
+
+
+# ------------------------------------------------- avto ochish (provision)
+
+
+class SeqHTTP:
+    """URL oxiriga qarab javob beradigan soxta HTTP."""
+
+    def __init__(self, routes):
+        self.routes = routes            # {"/api/provision": FakeResponse, ...}
+        self.calls = []
+
+    def get(self, url, params=None, timeout=None, headers=None):
+        self.calls.append((url, dict(params or {}), dict(headers or {})))
+        for suffix, resp in self.routes.items():
+            if url.endswith(suffix):
+                if isinstance(resp, Exception):
+                    raise resp
+                return resp
+        raise AssertionError(f"kutilmagan url: {url}")
+
+
+def _prov_env(monkeypatch, tmp_path):
+    _reload(monkeypatch, tmp_path,
+            LICENSE_API="https://bmp.example/api/check",
+            LICENSE_PROVISION_TOKEN="sinov-maxfiy")
+    db = importlib.import_module("bot.db")
+    db.migrate()
+    return {
+        "db": db,
+        "ctx": importlib.import_module("bot.ctx"),
+        "auth": importlib.import_module("bot.auth"),
+        "license": importlib.import_module("bot.license"),
+        "licsrv": importlib.import_module("bot.licsrv"),
+    }
+
+
+def test_provision_soroviga_token_va_telefon_ketadi(monkeypatch, tmp_path):
+    m = _prov_env(monkeypatch, tmp_path)
+    http = SeqHTTP({"/api/provision": FakeResponse(200, {
+        "found": True, "key": "GB-YANGI", "business_name": "Test Market",
+        "status": "active", "expires": "2026-09-14",
+    })})
+    got = m["licsrv"].provision("+998501097027", session=http)
+    assert got["key"] == "GB-YANGI"
+    url, params, headers = http.calls[0]
+    assert url == "https://bmp.example/api/provision"
+    assert params["phone"] == "+998501097027"
+    assert headers["X-Provision-Token"] == "sinov-maxfiy"
+
+
+def test_provision_topilmasa_none(monkeypatch, tmp_path):
+    m = _prov_env(monkeypatch, tmp_path)
+    http = SeqHTTP({"/api/provision": FakeResponse(200, {"found": False})})
+    assert m["licsrv"].provision("+998501097027", session=http) is None
+
+
+def test_provision_tokensiz_ochiq_emas(monkeypatch, tmp_path):
+    _reload(monkeypatch, tmp_path, LICENSE_API="https://bmp.example/api/check")
+    licsrv = importlib.import_module("bot.licsrv")
+    assert licsrv.provision_enabled() is False
+    # Chaqirilsa ham so'rov ketmaydi
+    assert licsrv.provision("+998501097027", session=None) is None
+
+
+def test_provision_403_unreachable(monkeypatch, tmp_path):
+    """403 «topilmadi» emas — sozlama xatosi. Mijoz adashtirilmasin."""
+    m = _prov_env(monkeypatch, tmp_path)
+    http = SeqHTTP({"/api/provision": FakeResponse(403, {"found": False})})
+    with pytest.raises(m["licsrv"].Unreachable):
+        m["licsrv"].provision("+998501097027", session=http)
+
+
+def test_provision_from_bmp_hisob_ochadi(monkeypatch, tmp_path):
+    m = _prov_env(monkeypatch, tmp_path)
+    http = SeqHTTP({
+        "/api/provision": FakeResponse(200, {
+            "found": True, "key": "GB-YANGI", "business_name": "Test Market",
+            "status": "active", "expires": "2026-09-14",
+        }),
+        "/api/check": FakeResponse(200, {
+            "status": "active", "expires_at": "2026-09-14", "days_left": 31,
+            "grace_days": 7, "modules": ["xodimlar", "ombor"],
+        }),
+    })
+    got = m["auth"].provision_from_bmp("+998501097027", tg_id=777, session=http)
+    assert got is not None
+    tenant_id, name = got
+    assert name == "Test Market"
+
+    with m["ctx"].scope(tenant_id):
+        rec = m["license"].record()
+        assert rec["license_key"] == "GB-YANGI"
+        assert rec["source"] == "bmp"
+        modules = importlib.import_module("bot.modules")
+        assert modules.list_enabled() == ["xodimlar", "ombor"]
+
+    row = m["db"].row("SELECT * FROM tenant WHERE id = ?", (tenant_id,))
+    assert row["phone"] == "+998501097027"
+    assert row["must_change"] == 1          # parolni o'zi o'rnatadi
+    assert m["db"].value(
+        "SELECT role FROM users WHERE tenant_id = ? AND tg_id = 777",
+        (tenant_id,)) == "owner"
+
+
+def test_provision_from_bmp_topilmasa_hisob_ochilmaydi(monkeypatch, tmp_path):
+    m = _prov_env(monkeypatch, tmp_path)
+    http = SeqHTTP({"/api/provision": FakeResponse(200, {"found": False})})
+    assert m["auth"].provision_from_bmp("+998501097027", tg_id=777,
+                                        session=http) is None
+    assert m["db"].value("SELECT COUNT(*) FROM tenant") == 0
+
+
+def test_provision_from_bmp_sync_yiqilsa_ham_hisob_qoladi(monkeypatch, tmp_path):
+    """provision o'tdi, check o'tmadi — kalit turadi, fon ishi tuzatadi."""
+    m = _prov_env(monkeypatch, tmp_path)
+    http = SeqHTTP({
+        "/api/provision": FakeResponse(200, {
+            "found": True, "key": "GB-YANGI", "business_name": "T",
+            "status": "active", "expires": "2026-09-14",
+        }),
+        "/api/check": OSError("tarmoq uzildi"),
+    })
+    got = m["auth"].provision_from_bmp("+998501097027", tg_id=777, session=http)
+    assert got is not None
+    with m["ctx"].scope(got[0]):
+        assert m["license"].record()["license_key"] == "GB-YANGI"

@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · litsenziya env nomlari + `/set_key`
+> Oxirgi yangilanish: 2026-08-14 · BMP orqali avto ochish (kontakt tugmasi)
 >
 > **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
@@ -275,7 +275,23 @@ almashtirishi so'raladi. Keyin Sozlamalar → Hisob dan istalgan payt.
   kalit qaysi biznesniki ekani noma'lum, taxmin qilinmaydi
 - Mavjud kalit env bilan qayta yozilmaydi
 
-**Testlar:** 394 ta, hammasi o'tadi.
+**BMP orqali avto ochish** (`CONTRACT.md §5`, `bot/auth.py`,
+`licsrv.provision`)
+- Sotuvchi mijozni **faqat BMP'da** ro'yxatga oladi (telefon bilan). Mijoz
+  HRPLUSNM'da «Kirish» → 📱 kontakt tugmasi → hisob avtomatik ochiladi,
+  kalit BMP'dan olinib bazaga yoziladi, mijoz o'ziga parol o'rnatadi
+- **Faqat Telegram kontakt orqali** (`contact.user_id == from_user.id`) —
+  yozilgan raqam bilan emas, aks holda birovning raqamini bilgan odam
+  do'konini egallab olardi
+- Token: BMP'da `PROVISION_TOKEN`, bu yerda `LICENSE_PROVISION_TOKEN` —
+  bir xil qiymat. Bo'sh bo'lsa avto ochish o'chiq, `/new_client` ishlaydi
+- 403/404/429 «topilmadi» emas — `Unreachable`: sozlama xatosida mijozga
+  «obuna yo'q» deb aldab bo'lmaydi
+- provision o'tib check o'tmasa — kalit turadi, fon ishi 15 daqiqada
+  sinxronlaydi
+- Mavjud hisob egasi kontakt yuborsa — odatdagidek parol so'raladi
+
+**Testlar:** 401 ta, hammasi o'tadi.
 
 ---
 

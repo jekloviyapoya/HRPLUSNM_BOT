@@ -145,3 +145,63 @@ def notice_of(payload):
         "level": notice.get("level") or "info",
         "text": text,
     }
+
+
+# ------------------------------------------------- avto ochish (provision)
+
+
+def provision_enabled():
+    return bool(base_url() and config.LICENSE_PROVISION_TOKEN)
+
+
+def provision(phone, bot_username=None, session=None):
+    """GET /api/provision — CONTRACT.md §5.
+
+    Telefon bo'yicha BMP'dan kalit so'raydi. Qaytadi: lug'at
+    ({key, business_name, status, expires}) yoki None (topilmadi).
+    Server javob bermasa — Unreachable.
+
+    DIQQAT: bu funksiya faqat Telegram kontakt orqali TASDIQLANGAN raqam
+    bilan chaqiriladi (§5.5). Yozilgan raqam bilan chaqirish — birovning
+    raqamini bilgan odamga do'konini ochib berish degani.
+    """
+    if not provision_enabled():
+        return None
+
+    params = {"phone": phone}
+    if bot_username:
+        params["bot"] = bot_username
+
+    http = session or requests
+    try:
+        resp = http.get(
+            base_url() + "/api/provision", params=params,
+            headers={"X-Provision-Token": config.LICENSE_PROVISION_TOKEN},
+            timeout=TIMEOUT,
+        )
+    except Exception as e:  # noqa: BLE001 — tarmoq
+        raise Unreachable(scrub(e, None)) from e
+
+    if resp.status_code >= 500:
+        raise Unreachable(f"server {resp.status_code}")
+    if resp.status_code >= 400:
+        # 403/404/429 — sozlama yoki token muammosi. Mijozga "topilmadi"
+        # deyish noto'g'ri bo'lardi, shuning uchun bu ham Unreachable.
+        raise Unreachable(f"provision rad etildi ({resp.status_code})")
+
+    try:
+        payload = resp.json()
+    except ValueError as e:
+        raise Unreachable("javob JSON emas") from e
+
+    if not isinstance(payload, dict) or not payload.get("found"):
+        return None
+    key = str(payload.get("key") or "").strip()
+    if not key:
+        return None
+    return {
+        "key": key,
+        "business_name": payload.get("business_name"),
+        "status": payload.get("status"),
+        "expires": payload.get("expires"),
+    }

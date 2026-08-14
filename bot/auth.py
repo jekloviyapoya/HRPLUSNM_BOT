@@ -210,3 +210,47 @@ def by_phone(phone):
     normalized = normalize_phone(phone)
     return db.row("SELECT * FROM tenant WHERE phone = ?",
                   (normalized,)) if normalized else None
+
+
+# ------------------------------------------- BMP orqali avto ochish (§5)
+
+
+def provision_from_bmp(phone, tg_id, session=None):
+    """Tasdiqlangan kontakt raqami bilan BMP'dan hisob ochadi.
+
+    Qaytadi: (tenant_id, biznes_nomi) yoki None (BMP'da topilmadi).
+    Tarmoq nosozligida licsrv.Unreachable ko'tariladi — chaqiruvchi
+    mijozga «keyinroq urinib ko'ring» deydi, «topilmadi» emas.
+
+    FAQAT Telegram kontakt orqali kelgan raqam bilan chaqiriladi
+    (contact.user_id == from_user.id). Yozilgan raqam bilan EMAS.
+    """
+    from . import config, ctx, license, licsrv
+
+    normalized = normalize_phone(phone)
+    if not normalized:
+        raise AuthError("Telefon raqami noto'g'ri.")
+
+    found = licsrv.provision(
+        normalized,
+        bot_username=config.LICENSE_BOT_USERNAME or None,
+        session=session,
+    )
+    if not found:
+        return None
+
+    # Hisob paroli hech kimga ko'rsatilmaydi — mijoz hoziroq o'zinikini
+    # o'rnatadi (must_change=1). create_account takrorni o'zi tekshiradi.
+    tenant_id, _plain = create_account(normalized,
+                                       name=found.get("business_name"))
+    with ctx.scope(tenant_id):
+        license.set_key(found["key"])
+        try:
+            license.sync(session=session)
+        except licsrv.Unreachable:
+            # provision o'tdi-yu check o'tmadi — kamdan-kam. Kalit turadi,
+            # fon ishi 15 daqiqada sinxronlaydi.
+            log.warning("Provision o'tdi, sync emas: tenant=%s", tenant_id)
+    bind_owner(tenant_id, tg_id)
+    log.info("BMP'dan avto ochildi: tenant=%s", tenant_id)
+    return tenant_id, found.get("business_name")

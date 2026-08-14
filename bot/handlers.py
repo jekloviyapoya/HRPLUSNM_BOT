@@ -7,7 +7,7 @@ aniqlab, ctx ga qo'yish. Busiz hech bir so'rov bajarilmaydi.
 import functools
 import logging
 
-from . import (auth, config, ctx, db, license, modules, onboarding,
+from . import (auth, config, ctx, db, license, licsrv, modules, onboarding,
                sessions, settings_ui, tenant, tenants, ui, users)
 from .modules import registry
 from .errors import BotError
@@ -361,9 +361,12 @@ def register(bot):
             sessions.set(tg_id, "auth:telefon", {})
             bot.send_message(
                 call.message.chat.id,
-                "Telefon raqamingizni yuboring.\n"
-                "Masalan: <code>+998901234567</code>",
-                parse_mode="HTML")
+                "Telefon raqamingizni pastdagi tugma orqali yuboring — "
+                "birinchi marta kirayotgan bo'lsangiz hisob avtomatik "
+                "ochiladi.\n\n"
+                "Yoki raqamni yozing: <code>+998901234567</code>",
+                parse_mode="HTML",
+                reply_markup=ui.contact_kb())
             return
 
         if call.data == "join:code":
@@ -979,6 +982,85 @@ def register(bot):
             text += f"\n\nℹ️ {notice['text']}"
         bot.send_message(message.chat.id, text,
                          reply_markup=ui.main_menu(message.from_user.id))
+
+    @bot.message_handler(content_types=["contact"])
+    @safe
+    def _contact(message):
+        """Kontakt — kirish yoki BMP orqali avto ochish.
+
+        Telegram kontaktdagi user_id ni o'zi tasdiqlaydi, shuning uchun
+        faqat shu yo'l bilan kelgan raqamga ishonamiz. Yozilgan raqam
+        bilan avto ochish yo'q — birovning raqamini bilish kifoya bo'lardi.
+        """
+        if _seen(message):
+            return
+        tg_id = message.from_user.id
+        if ctx.current() is not None:
+            bot.send_message(message.chat.id, "Siz allaqachon bir biznesdasiz.",
+                             reply_markup=ui.kb_remove())
+            return
+
+        contact = message.contact
+        if not contact or (contact.user_id or 0) != tg_id:
+            bot.send_message(
+                message.chat.id,
+                "Faqat o'z raqamingiz qabul qilinadi — pastdagi tugma orqali "
+                "yuboring.",
+                reply_markup=ui.contact_kb())
+            return
+
+        phone = contact.phone_number or ""
+        account = auth.by_phone(phone)
+        if account:
+            # Hisob bor — odatdagidek parol bilan kiradi
+            sessions.set(tg_id, "auth:parol", {"phone": phone})
+            bot.send_message(
+                message.chat.id,
+                "Raqam tasdiqlandi. Endi parolni yuboring.\n\n"
+                "⚠️ Yuborgach xabaringizni o'chirib tashlang — parol "
+                "Telegram tarixida qolib ketmasin.",
+                reply_markup=ui.kb_remove())
+            return
+
+        if not licsrv.provision_enabled():
+            bot.send_message(
+                message.chat.id,
+                "Bu raqam uchun hisob topilmadi.\n"
+                "Sotuvchi bilan bog'laning: @ulugbekbekbergenovbmp",
+                reply_markup=ui.kb_remove())
+            return
+
+        bot.send_message(message.chat.id, "Tekshirilmoqda…",
+                         reply_markup=ui.kb_remove())
+        try:
+            got = auth.provision_from_bmp(phone, tg_id)
+        except licsrv.Unreachable:
+            log.warning("Provision: markaz javob bermadi", exc_info=True)
+            bot.send_message(
+                message.chat.id,
+                "Markaz bilan hozircha aloqa yo'q. Birozdan keyin qayta "
+                "urining yoki sotuvchiga yozing: @ulugbekbekbergenovbmp")
+            return
+
+        if not got:
+            bot.send_message(
+                message.chat.id,
+                "Bu raqamga obuna topilmadi.\n"
+                "Ro'yxatdan o'tish uchun sotuvchiga yozing: "
+                "@ulugbekbekbergenovbmp")
+            return
+
+        tenant_id, name = got
+        ctx.set(tenant_id)
+        sessions.set(tg_id, "auth:yangi_parol", {})
+        bot.send_message(
+            message.chat.id,
+            f"✅ Xush kelibsiz: <b>{ui.escape(name or tenant.shop_name())}</b>\n"
+            "Hisobingiz tayyor.\n\n"
+            f"Endi o'zingizga parol o'ylang va yuboring (kamida "
+            f"{auth.MIN_LENGTH} ta belgi) — keyingi safar shu parol bilan "
+            "kirasiz.",
+            parse_mode="HTML")
 
     @bot.message_handler(content_types=["photo", "document", "sticker"])
     @safe

@@ -58,6 +58,10 @@ LICENSE_SERVER_URL = _license_url()
 # Bitta do'kon uchun alohida deploy qilinganda kalitni env'da berish mumkin.
 # Ko'p ijarachi rejimda ishlatilmaydi — u yerda har biznesning o'z kaliti bor.
 LICENSE_KEY = (os.getenv("LICENSE_KEY") or "").strip()
+
+# BMP §5: kontakt orqali avto ochish. BMP'dagi PROVISION_TOKEN bilan bir xil
+# qiymat. Bo'sh bo'lsa avto ochish o'chiq, faqat /new_client ishlaydi.
+LICENSE_PROVISION_TOKEN = (os.getenv("LICENSE_PROVISION_TOKEN") or "").strip()
 LICENSE_BOT_USERNAME = (os.getenv("LICENSE_BOT_USERNAME") or "").strip()
 LICENSE_CHECK_MINUTES = _int("LICENSE_CHECK_MINUTES", 15)
 

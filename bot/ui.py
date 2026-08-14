@@ -107,3 +107,14 @@ def chunks(text, limit=4000):
         out.append(text[:cut])
         text = text[cut:].lstrip("\n")
     return out
+
+
+def contact_kb():
+    """Kontakt so'rovchi klaviatura — Telegram raqam egasini tasdiqlaydi."""
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    kb.add(types.KeyboardButton("📱 Raqamni yuborish", request_contact=True))
+    return kb
+
+
+def kb_remove():
+    return types.ReplyKeyboardRemove()
