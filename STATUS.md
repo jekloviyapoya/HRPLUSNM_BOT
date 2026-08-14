@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `54484fb` + moliya
+> Oxirgi yangilanish: 2026-08-14 · commit `5c7e1c8` + marketing
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -174,7 +174,19 @@ Ko'rsatadi: kassadagi pul kassalar bo'yicha, ikki tomonlama qarzlar,
 zakaz limiti ochiq hisob-kitob bilan va odatdagi sur'atga nisbatan tavsiya.
 Bir hisobot yiqilsa qolgani ishlaydi.
 
-**Testlar:** 255 ta, hammasi o'tadi.
+**`marketing` moduli** (`bot/modules/marketing.py`, migratsiya `010`)
+- Oqim: mahsulot (katalogdan qidiriladi) → narxlar → AI matn → rasm →
+  AI poster (ixtiyoriy) → kanalga yuborish
+- **AI ishlamasa ham post chiqadi** — zaxira matn tayyor
+- **Holat qisman yangilanadi.** To'liq qayta yozish narxlarni o'chirib
+  yuborardi (2026-08-08 xatosi) — `update()` faqat berilgan maydonni
+  o'zgartiradi, test qo'riqlaydi
+- Poster (`bot/imagen.py`, gpt-image-1): mahsulot rasmidan sahna yasaydi.
+  Promptda «matn qo'shma» aytilgan — AI rasmda harflarni buzadi
+- Bito'da fayl yuklab olish endpointi yo'q, shuning uchun rasm
+  foydalanuvchidan so'raladi, avval behuda qidirilmaydi
+
+**Testlar:** 273 ta, hammasi o'tadi.
 
 ---
 
@@ -190,7 +202,7 @@ Bir hisobot yiqilsa qolgani ishlaydi.
 | `nakladnoy` | ✅ | ✅ |
 | `inventarizatsiya` | ✅ | ❌ |
 | `moliya` | ✅ | ✅ |
-| `marketing` | ✅ | ❌ |
+| `marketing` | ✅ | ✅ |
 | `mijoz` | ✅ | ❌ |
 
 `xodimlar` yoqilgan biznesda menyuda ikkita tugma chiqadi (egasi/menejerga),
@@ -200,14 +212,14 @@ xodimga bitta.
 
 ## Keyingi qadam
 
-**`marketing` moduli** — aksiya posti, AI poster, kanalga yuborish.
+**`inventarizatsiya` moduli** — telefonda sanash, farqni ko'rsatish.
 
 Nakladnoyda hali yo'q: katalogda topilmagan mahsulotni **Bito'da yangi
 yaratish** (hozircha faqat tashlab ketiladi). `PUT product/update` da
 `custom_fields` qaytarilishi shart — aks holda PLU o'chadi
 (`LESSONS-MARKET-BOT.md` §2.3).
 
-Undan keyingi tartib: `inventarizatsiya` → `ombor_ai` → `hr` → `mijoz`.
+Undan keyingi tartib: `ombor_ai` → `hr` → `mijoz`.
 
 **Sozlamalarda hali yo'q** (xodimlar moduli uchun kerak): ish joyi
 lokatsiyasi, radius, jadval qo'yish oynasi, stavka belgilash, ball berish.
