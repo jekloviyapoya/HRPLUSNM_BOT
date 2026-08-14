@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `ac661a4` + vazifalar
+> Oxirgi yangilanish: 2026-08-14 · commit `54484fb` + moliya
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -160,7 +160,21 @@ va ish haqi tarixi saqlanadi.
 - Hammaga berilgan vazifani kim qabul qilsa — o'shanga biriktiriladi
 - Ballar `xodimlar` moduliga yoziladi, ikkinchi hisob yuritilmaydi
 
-**Testlar:** 234 ta, hammasi o'tadi.
+**`moliya` moduli** (`bot/modules/moliya.py`)
+Uchta qoida market-bot'da amalda sinovdan o'tgan:
+- **Kassa balans hisobotidan** olinadi, tranzaksiyalardan yig'ilmaydi
+  (taxmin 10.7 mln ko'rsatgan, haqiqiysi 31.2 mln edi)
+- **Firmalar `supplier/get-paging` dan.** Qarz hisobotidagi `supplier._id`
+  mahsulot kartochkasidagi `supplier_ids` bilan mos kelmaydi — 114 ta
+  bog'langan mahsulotda nol moslik chiqqan
+- **Zakaz limiti ufq kuniga bo'linadi.** Bo'linmasa bir kunlik zakazga
+  butun haftalik byudjet ruxsat berilgan bo'lardi (7 barobar ortiq)
+
+Ko'rsatadi: kassadagi pul kassalar bo'yicha, ikki tomonlama qarzlar,
+zakaz limiti ochiq hisob-kitob bilan va odatdagi sur'atga nisbatan tavsiya.
+Bir hisobot yiqilsa qolgani ishlaydi.
+
+**Testlar:** 255 ta, hammasi o'tadi.
 
 ---
 
@@ -175,7 +189,7 @@ va ish haqi tarixi saqlanadi.
 | `ombor_ai` | ✅ | ❌ |
 | `nakladnoy` | ✅ | ✅ |
 | `inventarizatsiya` | ✅ | ❌ |
-| `moliya` | ✅ | ❌ |
+| `moliya` | ✅ | ✅ |
 | `marketing` | ✅ | ❌ |
 | `mijoz` | ✅ | ❌ |
 
@@ -186,15 +200,14 @@ xodimga bitta.
 
 ## Keyingi qadam
 
-**`moliya` moduli** — pul taqvimi, qarzlar, zakaz limiti. Bito talab qiladi.
+**`marketing` moduli** — aksiya posti, AI poster, kanalga yuborish.
 
 Nakladnoyda hali yo'q: katalogda topilmagan mahsulotni **Bito'da yangi
 yaratish** (hozircha faqat tashlab ketiladi). `PUT product/update` da
 `custom_fields` qaytarilishi shart — aks holda PLU o'chadi
 (`LESSONS-MARKET-BOT.md` §2.3).
 
-Undan keyingi tartib: `marketing` → `inventarizatsiya` → `ombor_ai` →
-`hr` → `mijoz`.
+Undan keyingi tartib: `inventarizatsiya` → `ombor_ai` → `hr` → `mijoz`.
 
 **Sozlamalarda hali yo'q** (xodimlar moduli uchun kerak): ish joyi
 lokatsiyasi, radius, jadval qo'yish oynasi, stavka belgilash, ball berish.

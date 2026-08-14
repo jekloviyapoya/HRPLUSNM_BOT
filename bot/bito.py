@@ -48,6 +48,16 @@ PATHS = {
     "suppliers": ["supplier/get-paging", "suppliers/get-paging"],
     "purchase_create": ["purchase/create", "purchases/create"],
     "purchases": ["purchase/get-paging", "purchases/get-paging"],
+    # Kassadagi pul: balans hisobotidan. Tranzaksiyalardan yig'ish xato
+    # natija beradi (market-bot: 10.7M ko'rsatgan, haqiqiysi 31.2M edi)
+    "balance": ["reports/balance/get", "reports/finance/balance/get",
+                "reports/balance", "cashbox/get-all"],
+    "debt": ["reports/dashboard/summary/debt/get-summary",
+             "reports/pos/summary/debt/get-summary"],
+    "credit": ["reports/dashboard/summary/credit/get-summary",
+               "reports/pos/summary/credit/get-summary"],
+    "income_expense": ["reports/finance/income-expense-stats",
+                       "reports/finance/income_expense_stats"],
 }
 
 # Sahifali so'rovlar. Bito `page` ni MAJBURIY talab qiladi — hujjatda
@@ -308,6 +318,18 @@ class Bito:
     def products(self, page=1, limit=MAX_LIMIT, search=None, category_id=None):
         return self.paged("products", page=page, limit=limit,
                           search=search, category_id=category_id)
+
+    def balance(self):
+        return self.get("balance")
+
+    def debt_summary(self):
+        return self.get("debt")
+
+    def credit_summary(self):
+        return self.get("credit")
+
+    def purchases(self, page=1, limit=MAX_LIMIT, **filters):
+        return self.paged("purchases", page=page, limit=limit, **filters)
 
     def suppliers(self, page=1, limit=MAX_LIMIT, search=None):
         return self.paged("suppliers", page=page, limit=limit, search=search)
