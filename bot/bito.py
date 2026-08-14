@@ -43,7 +43,14 @@ PATHS = {
         "uom/get-all",
     ],
     "currencies": ["currency/get-all", "currencies/get-all"],
+    "products": ["product/get-paging", "products/get-paging"],
+    "product_by_barcode": ["product/get-by-barcode", "products/get-by-barcode"],
 }
+
+# Sahifali so'rovlar. Bito `page` ni MAJBURIY talab qiladi — hujjatda
+# ixtiyoriy deb yozilgan bo'lsa ham. Yuborilmasa 400 qaytadi.
+PAGED = {"products"}
+MAX_LIMIT = 200
 
 
 # --------------------------------------------------------------- yordamchilar
@@ -189,6 +196,35 @@ class Bito:
     def get(self, logical, **kwargs):
         return self.call(self.resolve(logical), **kwargs)
 
+    def paged(self, logical, page=1, limit=MAX_LIMIT, **filters):
+        """Sahifali so'rov. `page` doim yuboriladi — Bito busiz 400 beradi.
+
+        Qaytadi: (qatorlar, jami). Usul (GET/POST) noma'lum bo'lgani uchun
+        ikkalasi sinaladi va ishlagani keshlanadi.
+        """
+        params = {"page": int(page), "limit": min(int(limit), MAX_LIMIT)}
+        params.update({k: v for k, v in filters.items() if v not in (None, "")})
+        path = self.resolve(logical)
+
+        cached = tenant.get(f"bito_method_{logical}")
+        methods = [cached] if cached else ["GET", "POST"]
+        last = None
+        for method in methods:
+            kwargs = {"params": params} if method == "GET" else {"json": params}
+            resp = self.raw(path, method, **kwargs)
+            if resp.status_code < 400:
+                if not cached:
+                    tenant.set(f"bito_method_{logical}", method)
+                try:
+                    payload = unwrap(resp.json())
+                except ValueError:
+                    raise BitoError("Bito tushunarsiz javob qaytardi.", path=path)
+                return self._items(payload), self._total(payload)
+            last = resp
+        raise BitoError(
+            _explain(last.status_code if last else 0, None), path=path
+        )
+
     # -- kalitni tekshirish --
 
     def verify(self):
@@ -224,6 +260,14 @@ class Bito:
     # -- ma'lumot ro'yxatlari --
 
     @staticmethod
+    def _total(payload):
+        if isinstance(payload, dict):
+            for key in ("total", "total_count", "count"):
+                if isinstance(payload.get(key), int):
+                    return payload[key]
+        return None
+
+    @staticmethod
     def _items(payload):
         if isinstance(payload, list):
             return payload
@@ -257,6 +301,10 @@ class Bito:
             if sale:
                 items = sale
         return items
+
+    def products(self, page=1, limit=MAX_LIMIT, search=None, category_id=None):
+        return self.paged("products", page=page, limit=limit,
+                          search=search, category_id=category_id)
 
     def uoms(self, only_active=True):
         items = self._items(self.get("uoms"))

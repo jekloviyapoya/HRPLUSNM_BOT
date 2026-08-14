@@ -7,7 +7,8 @@ import logging
 import threading
 import time
 
-from . import config, ctx, db, license, tenant, tenants
+from . import config, ctx, db, license, modules, tenant, tenants
+from .modules import registry
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +52,35 @@ def _sync_remote(bot, tenant_id):
             log.warning("Sotuvchiga ogohlantirish ketmadi", exc_info=True)
 
 
+_last_run = {}
+
+
+def _module_jobs(bot):
+    """Modullarning fon ishlari — faqat yoqilgan biznesda."""
+    now = time.time()
+    for spec in registry.implemented():
+        try:
+            declared = spec.impl.jobs() or []
+        except Exception:  # noqa: BLE001
+            log.exception("Modul ishlari o'qilmadi: %s", spec.key)
+            continue
+        for name, fn, interval in declared:
+            for tenant_id in modules.tenants_with(spec.key):
+                key = (name, tenant_id)
+                if now - _last_run.get(key, 0) < interval:
+                    continue
+                _last_run[key] = now
+                try:
+                    with ctx.scope(tenant_id):
+                        if "bito" in spec.requires and not modules.bito_ready():
+                            continue
+                        fn()
+                    log.info("Fon ishi bajarildi: %s tenant=%s", name, tenant_id)
+                except Exception:  # noqa: BLE001 — bittasi qolganini to'xtatmasin
+                    log.exception("Fon ishi yiqildi: %s tenant=%s",
+                                  name, tenant_id)
+
+
 def _tick(bot):
     """Har biznes uchun obuna holatini tekshiradi."""
     for tenant_id in tenants.all_ids():
@@ -84,6 +114,7 @@ def _tick(bot):
         except Exception:  # noqa: BLE001
             log.exception("Obuna tekshiruvi yiqildi: tenant=%s", tenant_id)
 
+    _module_jobs(bot)
     db.prune()
 
 

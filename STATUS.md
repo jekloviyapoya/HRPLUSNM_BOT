@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `7c6793e` + Bito ikki qavat
+> Oxirgi yangilanish: 2026-08-14 · commit `1c793d0` + ombor
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -82,7 +82,25 @@
 - Ish haqi: oylik yoki kunbay stavka, avans/ushlab qolish/mukofot, qoldiq
 - Menejer paneli: jamoa holati bir ekranda
 
-**Testlar:** 109 ta, hammasi o'tadi.
+**`ombor` moduli** (`bot/modules/ombor.py`, migratsiya `006`)
+- **Qidiruv jonli** — bitta so'rov, tez. Nom, SKU, shtrix-kod bo'yicha
+- **Kam qolganlar keshdan** — Bito'da 10 000+ mahsulot bo'lishi mumkin,
+  sahifa 200 ta. Har safar yig'ish 50+ so'rov degani, bot javobi uchun
+  juda sekin. Fonda kuniga bir marta skanerlanadi
+- Chegara: Bito'dagi `red_line` → `yellow_line` → tenant sozlamasi. Hech
+  biri yo'q bo'lsa **faqat tugaganlar** ko'rsatiladi. Aks holda chegara
+  to'ldirilmagan do'konda mahsulotlarning yarmi «kam» bo'lib chiqardi
+- `_warehouses` bor bo'lsa faqat u hukmron — ko'p omborli do'konda boshqa
+  filial qoldig'i o'ziniki ko'rinmasin
+- Modul fon ishlari `jobs.py` orqali: faqat modul yoqilgan va Bito ulangan
+  biznesda ishlaydi
+
+**Bito klientida yangi**
+- `paged()`: `page` **doim yuboriladi** — Bito uni majburiy talab qiladi,
+  hujjatda ixtiyoriy deb yozilgan bo'lsa ham (400 qaytaradi)
+- So'rov usuli (GET/POST) noma'lum — ikkalasi sinaladi, ishlagani keshlanadi
+
+**Testlar:** 129 ta, hammasi o'tadi.
 
 ---
 
@@ -93,7 +111,7 @@
 | `xodimlar` | ✅ | ✅ |
 | `vazifalar` | ✅ | ❌ keyingi ish |
 | `hr` | ✅ | ❌ |
-| `ombor` | ✅ | ❌ |
+| `ombor` | ✅ | ✅ |
 | `ombor_ai` | ✅ | ❌ |
 | `nakladnoy` | ✅ | ❌ |
 | `inventarizatsiya` | ✅ | ❌ |
@@ -108,11 +126,11 @@ xodimga bitta.
 
 ## Keyingi qadam
 
-**`vazifalar` moduli.** Xodimlar bilan bog'lanadi: bajarilgan vazifa ball
-beradi, muddati o'tgani ball ayiradi.
+**`nakladnoy` moduli** — market-bot funksiyalarini ko'chirish davomi.
+Rasm/PDF → AI o'qish → Bito'ga kirim.
 
-Undan keyingi tartib: `hr` → `ombor` → `nakladnoy` → `moliya` → qolganlari.
-Har modul alohida push, sinovlari bilan.
+Undan keyingi tartib: `ombor_ai` → `inventarizatsiya` → `moliya` →
+`marketing` → `vazifalar` → `hr` → `mijoz`.
 
 **Sozlamalarda hali yo'q** (xodimlar moduli uchun kerak): ish joyi
 lokatsiyasi, radius, jadval qo'yish oynasi, stavka belgilash, ball berish.
