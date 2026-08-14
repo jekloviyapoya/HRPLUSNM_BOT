@@ -56,6 +56,7 @@ PATHS = {
              "reports/pos/summary/debt/get-summary"],
     "credit": ["reports/dashboard/summary/credit/get-summary",
                "reports/pos/summary/credit/get-summary"],
+    "revision_create": ["revision/create", "revisions/create"],
     "income_expense": ["reports/finance/income-expense-stats",
                        "reports/finance/income_expense_stats"],
 }
@@ -318,6 +319,19 @@ class Bito:
     def products(self, page=1, limit=MAX_LIMIT, search=None, category_id=None):
         return self.paged("products", page=page, limit=limit,
                           search=search, category_id=category_id)
+
+    def create_revision(self, body):
+        """Inventarizatsiya yaratadi. Javob obyektini qaytaradi."""
+        return self.raw(self.resolve("revision_create"), "POST", json=body,
+                        timeout=60)
+
+    def revision_add(self, revision_id, body):
+        return self.raw(f"revision/add-products/{revision_id}", "POST",
+                        json=body, timeout=60)
+
+    def revision_status(self, revision_id, status):
+        return self.raw(f"revision/set-status/{revision_id}", "PUT",
+                        json={"status": status}, timeout=60)
 
     def balance(self):
         return self.get("balance")
