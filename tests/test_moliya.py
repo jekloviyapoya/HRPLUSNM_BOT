@@ -272,3 +272,83 @@ def test_modul_reyestrda_bito_talab_qiladi(env):
     modules = importlib.import_module("bot.modules")
     assert registry.BY_KEY["moliya"].ready
     assert modules.needs_bito("moliya")
+
+
+# --- savdo (PARITY 1-band) ---
+
+
+class FakeSalesClient:
+    def __init__(self, summary=None, employees=None):
+        self._summary = summary or {"gross_sales": 3_500_000, "receipts": 42}
+        self._employees = employees if employees is not None else [
+            {"full_name": "Aziza", "gross_sales": 2_000_000, "receipts": 25},
+            {"full_name": "Bek", "gross_sales": 1_500_000, "receipts": 17},
+        ]
+        self.calls = []
+
+    def sales_summary(self, frm, to, organization_id=None):
+        self.calls.append(("summary", frm, to, organization_id))
+        return self._summary
+
+    def sales_by_responsible(self, frm, to):
+        self.calls.append(("resp", frm, to))
+        return self._employees
+
+
+def test_utc_range_mahalliy_kun_chegarasi(env):
+    import datetime as dt
+    frm, to = env["m"].utc_range(dt.date(2026, 8, 14), dt.date(2026, 8, 14), 5)
+    assert frm == "2026-08-13T19:00:00.000Z"       # 00:00 UZT
+    assert to == "2026-08-14T18:59:59.999Z"        # 23:59:59.999 UZT
+
+
+def test_format_sales_tartib_va_bonus_reja(env):
+    m = env["m"]
+    importlib.import_module("bot.tenant").set("savdo_reja", "7000000")
+    text = m.format_sales({"gross_sales": 3_500_000, "receipts": 42},
+                          [{"full_name": "Bek", "gross_sales": 1_500_000,
+                            "receipts": 17},
+                           {"full_name": "Aziza", "gross_sales": 2_000_000,
+                            "receipts": 25}],
+                          "Oylik savdo — 08.2026", "so'm")
+    assert text.index("Aziza") < text.index("Bek")   # ko'p sotgan birinchi
+    assert "Oy rejasi: 50%" in text
+    assert "█████░░░░░" in text
+
+
+def test_format_sales_reja_faqat_oylikda(env):
+    m = env["m"]
+    importlib.import_module("bot.tenant").set("savdo_reja", "7000000")
+    text = m.format_sales({"gross_sales": 3_500_000}, [], "Bugungi savdo",
+                          "so'm")
+    assert "Oy rejasi" not in text
+
+
+def test_my_sales_boglanmagan_none(env):
+    assert env["m"].my_sales(555, client=FakeSalesClient()) is None
+
+
+def test_my_sales_bonus_hisoblanadi(env):
+    m = env["m"]
+    tenant = importlib.import_module("bot.tenant")
+    tenant.set("bito_name:555", "Aziza")
+    tenant.set("savdo_bonus", "0.01")
+    got = m.my_sales(555, client=FakeSalesClient())
+    assert got["gross"] == 2_000_000
+    assert got["receipts"] == 25
+    assert got["bonus"] == 20_000
+
+
+def test_parse_range_bitta_va_ikki_sana(env):
+    import datetime as dt
+    m = env["m"]
+    frm, to = m._parse_range("01.08.2026 14.08.2026")
+    assert (frm, to) == (dt.date(2026, 8, 1), dt.date(2026, 8, 14))
+    frm, to = m._parse_range("14.08.2026")
+    assert frm == to == dt.date(2026, 8, 14)
+    # Teskari tartib to'g'irlanadi
+    frm, to = m._parse_range("14.08.2026 01.08.2026")
+    assert frm < to
+    from bot.errors import BotError
+    with pytest.raises(BotError):
+        m._parse_range("2026-08-01")

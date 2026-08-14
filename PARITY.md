@@ -28,8 +28,12 @@
 
 Tartib — do'konga foyda bo'yicha. Yopilganda SHA yoziladi.
 
-1. **💵 Savdo** — sotuv hisobotlari: boshliqqa bugungi/haftalik/oylik,
-   xodimga «mening savdom». market-bot: 12418-qator atrofida
+1. ~~💵 Savdo~~ — **yopildi** (`moliya` ichida, yangi modul kaliti
+   CONTRACT §3 ni buzmasin deb). Bugungi/haftalik/oylik/muddatli, oylik
+   reja + chiziq, bonus foizi, xodimga «mening savdom», xodim↔Bito ismi
+   bog'lash (30 kunlik sotuvchilardan tanlanadi, qo'lda yozilmaydi).
+   Keyinga qoldi: «turib qolgan mahsulot sotuvi» kesimi, bonusni ish
+   haqiga qo'shish
 2. **🛒 Zakaz** — firmaga buyurtma tuzish oqimi (tavsiyadan farqli,
    bu haqiqiy zakaz ro'yxati). 5644-qator
 3. **🛒 Zarur mahsulotlar** — jamoaviy «tugayapti» ro'yxati, xodim ham

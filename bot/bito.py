@@ -66,6 +66,9 @@ PATHS = {
     "sales_by_item": ["sales/by-item-pagin", "reports/sales/by-item-pagin"],
     "income_expense": ["reports/finance/income-expense-stats",
                        "reports/finance/income_expense_stats"],
+    # Savdo (market-bot ishlab turgan yo'llari): jami + sotuvchilar kesimi
+    "dashboard_summary": ["reports/dashboard/summary"],
+    "sales_by_responsible": ["reports/dashboard/top/responsible"],
 }
 
 # Sahifali so'rovlar. Bito `page` ni MAJBURIY talab qiladi — hujjatda
@@ -365,6 +368,29 @@ class Bito:
         is_product/is_material/is_semi_product/is_marked (jonli sinovda tasdiqlangan, 2026-08-14)."""
         return self.raw(self.resolve("product_create"), "POST", json=body,
                         timeout=timeout or 30)
+
+    def sales_summary(self, from_iso, to_iso, organization_id=None):
+        """Davr bo'yicha jami savdo. Sana chegaralari UTC ISO bo'lishi
+        shart (market-bot saboqlari: mahalliy kun UTC ga o'girib
+        yuboriladi, aks holda kun chegarasi suriladi)."""
+        body = {"from_date": from_iso, "to_date": to_iso}
+        if organization_id:
+            body["organization_ids"] = [str(organization_id)]
+        payload = self.raw(self.resolve("dashboard_summary"), "POST",
+                           json=body, timeout=30)
+        data = unwrap(payload)
+        if isinstance(data, dict):
+            return data.get("total", data)
+        return data
+
+    def sales_by_responsible(self, from_iso, to_iso):
+        """Sotuvchilar kesimida savdo: [{name/full_name, gross_sales,
+        receipts}, ...]."""
+        payload = self.raw(self.resolve("sales_by_responsible"), "POST",
+                           json={"from_date": from_iso, "to_date": to_iso},
+                           timeout=30)
+        data = unwrap(payload)
+        return self._items(data) if not isinstance(data, list) else data
 
     def create_purchase(self, body, timeout=None):
         """Kirim yaratadi. Javob obyektini QAYTARADI, xato tashlamaydi.

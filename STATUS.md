@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · PARITY.md — market-bot bilan tenglik rejasi
+> Oxirgi yangilanish: 2026-08-14 · Savdo (PARITY 1-band)
 >
 > **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
@@ -318,7 +318,17 @@ almashtirishi so'raladi. Keyin Sozlamalar → Hisob dan istalgan payt.
 - 120 soniyadan uzun ovoz rad etiladi; til avtomatik (o'zbek/rus)
 - Env: `GROQ_API_KEY` (bo'sh bo'lsa modul o'chiq, bot ishlayveradi)
 
-**Testlar:** 418 ta, hammasi o'tadi.
+**Savdo (moliya ichida)** — PARITY 1-band
+- Yangi modul kaliti ochilmadi (CONTRACT §3 qat'iy) — savdo `moliya`
+  bo'limi. Menejer: 💵 Savdo menyusi; xodim: «Bugungi savdongiz»
+- Bito yo'llari market-bot'dan (ishlab turgan): `reports/dashboard/summary`
+  (POST) va `reports/dashboard/top/responsible` (POST)
+- Kun chegaralari mahalliy vaqtdan UTC ga o'giriladi (utc_range) —
+  aks holda Bito kunni suradi
+- Sozlamalar: `savdo_reja`, `savdo_bonus` (standart 0.5%),
+  `bito_name:<tg_id>` — xodim↔Bito ismi
+
+**Testlar:** 424 ta, hammasi o'tadi.
 
 ---
 
