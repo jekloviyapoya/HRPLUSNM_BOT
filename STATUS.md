@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `e50e826`
+> Oxirgi yangilanish: 2026-08-14 · commit `a9cb8ee` + xodimlar
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -37,6 +37,14 @@
   bilan. Avtomatik qulflash yo'q, sotuvchiga ogohlantirish boradi
 - `license_key` logdan tozalanadi
 
+**Offline qoidasi** (`CONTRACT.md` §1.6)
+- Aloqa yo'qligi **hech qachon** qulflash sababi emas
+- Oxirgi ma'lum `expires` mahalliy saqlanadi. `expires + grace_days` o'tsa —
+  server holatidan qat'i nazar cheklanadi
+- Ikki manbadan qat'iyrog'i olinadi: server javobi va sana hisobi
+- Natija: yo'lni to'sib cheksiz litsenziya olib bo'lmaydi; BMP yiqilsa
+  to'lagan mijoz to'xtamaydi
+
 **Modul litsenziyasi** (`bot/modules/`)
 - Pog'onali tarif olib tashlandi. Har modul alohida yoqiladi
 - Katalog: 10 modul (`registry.py`), `@implement` bilan sinf biriktiriladi
@@ -52,7 +60,19 @@
   kalitning niqoblanishi
 - Shartnoma o'zgarsa bu testlar yiqiladi — bu maqsad
 
-**Testlar:** 70 ta, hammasi o'tadi.
+**`xodimlar` moduli** (`bot/modules/xodimlar.py`, migratsiya `005`)
+- Ish jadvali: hafta kuni bo'yicha boshlanish/tugash vaqti
+- Davomat: keldim/ketdim, kechikish avtomatik hisoblanadi (5 daqiqagacha
+  bag'rikenglik), ishlagan vaqt
+- Joylashuv tekshiruvi: ish joyi belgilangan bo'lsa, radiusdan tashqarida
+  qayd qilinmaydi. Belgilanmagan bo'lsa — so'ralmaydi
+- Ballar: har o'zgarish alohida qator, jami **hech qachon ustunda
+  saqlanmaydi** — har doim yig'indi bilan hisoblanadi
+- Reyting: oylik, medallar bilan
+- Ish haqi: oylik yoki kunbay stavka, avans/ushlab qolish/mukofot, qoldiq
+- Menejer paneli: jamoa holati bir ekranda
+
+**Testlar:** 101 ta, hammasi o'tadi.
 
 ---
 
@@ -60,8 +80,8 @@
 
 | Kalit | Katalogda | Yozilgan |
 |---|---|---|
-| `xodimlar` | ✅ | ❌ keyingi ish |
-| `vazifalar` | ✅ | ❌ |
+| `xodimlar` | ✅ | ✅ |
+| `vazifalar` | ✅ | ❌ keyingi ish |
 | `hr` | ✅ | ❌ |
 | `ombor` | ✅ | ❌ |
 | `ombor_ai` | ✅ | ❌ |
@@ -71,39 +91,35 @@
 | `marketing` | ✅ | ❌ |
 | `mijoz` | ✅ | ❌ |
 
-Hozir menyuda faqat **Sozlamalar** va **Obuna** ko'rinadi — bu kutilgan holat.
+`xodimlar` yoqilgan biznesda menyuda ikkita tugma chiqadi (egasi/menejerga),
+xodimga bitta.
 
 ---
 
 ## Keyingi qadam
 
-**`xodimlar` moduli.** Bito talab qilmaydi, shuning uchun mijoz Bito ulanmasdan
-ham darrov foyda ko'radi.
+**`vazifalar` moduli.** Xodimlar bilan bog'lanadi: bajarilgan vazifa ball
+beradi, muddati o'tgani ball ayiradi.
 
-Tarkibi: davomat (lokatsiya bilan), ish haqi, ballar va reyting, ish jadvali.
+Undan keyingi tartib: `hr` → `ombor` → `nakladnoy` → `moliya` → qolganlari.
+Har modul alohida push, sinovlari bilan.
 
-Undan keyingi tartib: `vazifalar` → `hr` → `ombor` → `nakladnoy` → `moliya` →
-qolganlari. Har modul alohida push, sinovlari bilan.
+**Sozlamalarda hali yo'q** (xodimlar moduli uchun kerak): ish joyi
+lokatsiyasi, radius, jadval qo'yish oynasi, stavka belgilash, ball berish.
+Hozircha bu qiymatlar faqat kod orqali qo'yiladi.
 
 ---
 
 ## Ochiq savollar
 
-1. **72 soatdan keyin nima bo'ladi?** `CONTRACT.md` §1.1: «mijoz 503 ni
-   offline deb qabul qiladi va oxirgi holatda ishlashda davom etadi
-   (72 soat)». Undan keyingi xulq aytilmagan.
-   Hozirgi kod: **qulflamaydi**, faqat sotuvchiga ogohlantirish yuboradi.
-   Sabab — BMP uzoq yiqilsa 50 ta biznes to'xtashi serverning o'zi
-   yo'qligidan yomonroq. Agar shartnoma 72 soatdan keyin qulflashni
-   ko'zda tutsa — ayting, bir qatorlik o'zgarish
-2. **`modules_detail` saqlanmaydi.** HRPLUSNM modullari limitsiz (yoq/o'chir),
+1. **`modules_detail` saqlanmaydi.** HRPLUSNM modullari limitsiz (yoq/o'chir),
    shuning uchun hozircha kerak emas. `/api/usage` faqat limitli modullar
    uchun — HRPLUSNM'da bittasi ham yo'q. Limitli modul paydo bo'lsa,
    migratsiya + `usage()` chaqiruvi qo'shiladi
-3. **`business_name` ishlatilmaydi.** Do'kon nomi mijozning o'zidan olinadi
+2. **`business_name` ishlatilmaydi.** Do'kon nomi mijozning o'zidan olinadi
    (sehrgarda). BMP'dagi nom bilan solishtirish foydali bo'lishi mumkin —
    kerak bo'lsa qo'shaman
-4. **Tugma bilan tanlash yo'li sinalmagan.** Bonnu'da har biridan bitta
+3. **Tugma bilan tanlash yo'li sinalmagan.** Bonnu'da har biridan bitta
    tashkilot/ombor bo'lgani uchun sehrgar avtomatik o'tadi. Bir nechta variant
    bo'lgan mijozda bu yo'l birinchi marta ishlaydi
 

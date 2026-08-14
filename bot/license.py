@@ -51,15 +51,45 @@ def days_left():
     return (_parse(record()["expires_at"]) - _today()).days
 
 
+# Qat'iylik tartibi: keyingisi oldingisini bosadi
+_SEVERITY = {"trial": 0, "active": 0, "grace": 1, "locked": 2}
+
+
+def _date_state(rec):
+    """Faqat sanaga qarab holat. Aloqa bor-yo'qligidan qat'i nazar.
+
+    CONTRACT.md §1.6: qulflash qarori to'lov ma'lumotiga qaraydi.
+    Oxirgi ma'lum `expires` mahalliy saqlanadi, shuning uchun markazga
+    yo'lni to'sib cheksiz litsenziya olib bo'lmaydi.
+    """
+    left = (_parse(rec["expires_at"]) - _today()).days
+    if left >= 0:
+        return "active"
+    grace = rec["grace_days"]
+    if grace is None:
+        grace = config.GRACE_DAYS
+    return "grace" if abs(left) <= int(grace) else "locked"
+
+
 def state():
     """Holatni qaytaradi.
 
-    Markaziy kalit bo'lsa — oxirgi ma'lum javob (aloqa yo'qligida ham
-    mijoz ishlaydi). Aks holda sana bo'yicha mahalliy hisob.
+    Markaziy kalit bo'lsa — ikkita manbadan qat'iyrog'i olinadi:
+      1. oxirgi ma'lum server javobi (`suspended` -> darhol qulf)
+      2. mahalliy sana hisobi (`expires + grace_days` o'tsa -> qulf)
+
+    Shu sababli: aloqa yo'qligi hech qachon qulflash sababi emas, lekin
+    to'lov muddati tugagani — sababi. CONTRACT.md §1.6.
     """
     rec = record()
     if rec["license_key"] and rec["source"] == "bmp":
-        return rec["state"]
+        remote = rec["state"]
+        by_date = _date_state(rec)
+        now = remote if _SEVERITY.get(remote, 0) >= _SEVERITY[by_date] else by_date
+        if now != remote:
+            db.run("UPDATE license SET state = ? WHERE tenant_id = ?",
+                   (now, ctx.require()))
+        return now
     left = (_parse(rec["expires_at"]) - _today()).days
     was = rec["state"]
 

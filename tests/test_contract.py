@@ -208,3 +208,75 @@ def test_kalit_niqoblanadi(mod):
     with pytest.raises(licsrv.Unreachable) as exc:
         licsrv.check(key, session=FakeHTTP(boom=boom))
     assert key not in str(exc.value)
+
+
+# --- §1.6 Offline qoidasi ---
+
+def _sample(days_from_today, grace=7, status="active"):
+    import datetime as dt
+    date = (dt.date.today() + dt.timedelta(days=days_from_today)).isoformat()
+    return dict(SAMPLE, status=status, expires=date, expires_at=date,
+                days_left=days_from_today, grace_days=grace)
+
+
+def test_aloqa_yoqligi_qulflash_sababi_emas(mod):
+    """§1.6: to'lagan mijoz markaz yiqilsa ham ishlayveradi."""
+    lic = mod["license"]
+    lic.set_key("GB-XXXX")
+    lic.sync(session=FakeHTTP(FakeResponse(200, _sample(+30))))
+    assert lic.state() == "active"
+
+    for _ in range(5):                      # uzoq uzilish
+        lic.sync(session=FakeHTTP(boom=OSError("tarmoq yo'q")))
+    assert lic.state() == "active"
+    assert lic.is_locked() is False
+
+
+def test_mahalliy_muddat_tugasa_aloqasiz_ham_cheklanadi(mod):
+    """§1.6: yo'lni to'sib cheksiz litsenziya ishlamaydi."""
+    lic = mod["license"]
+    lic.set_key("GB-XXXX")
+    # server oxirgi marta «active» degan, lekin muddat kecha tugagan
+    lic.sync(session=FakeHTTP(FakeResponse(200, _sample(-1, grace=7))))
+    assert lic.state() == "grace"           # imtiyoz kunlari ichida
+
+    lic.sync(session=FakeHTTP(boom=OSError("aloqa yo'q")))
+    assert lic.state() == "grace"           # aloqa yo'q, lekin sana hukmron
+
+
+def test_imtiyoz_kunlaridan_chiqsa_aloqasiz_qulflanadi(mod):
+    lic = mod["license"]
+    lic.set_key("GB-XXXX")
+    lic.sync(session=FakeHTTP(FakeResponse(200, _sample(-20, grace=7))))
+    lic.sync(session=FakeHTTP(boom=OSError("aloqa yo'q")))
+    assert lic.state() == "locked"
+    assert lic.is_locked()
+
+
+def test_server_suspended_desa_sana_kelajakda_bolsa_ham_qulf(mod):
+    """Ikki manbadan qat'iyrog'i olinadi."""
+    lic = mod["license"]
+    lic.set_key("GB-XXXX")
+    lic.sync(session=FakeHTTP(FakeResponse(200, _sample(+30, status="suspended"))))
+    assert lic.state() == "locked"
+    lic.sync(session=FakeHTTP(boom=OSError("aloqa yo'q")))
+    assert lic.state() == "locked"          # aloqa uzilsa ham ochilmaydi
+
+
+def test_tolov_kelgach_aloqa_tiklanib_ochiladi(mod):
+    lic = mod["license"]
+    lic.set_key("GB-XXXX")
+    lic.sync(session=FakeHTTP(FakeResponse(200, _sample(-20, grace=7))))
+    assert lic.is_locked()
+    lic.sync(session=FakeHTTP(FakeResponse(200, _sample(+30))))
+    assert lic.state() == "active"
+
+
+def test_grace_days_kelmasa_standart_ishlatiladi(mod):
+    lic = mod["license"]
+    lic.set_key("GB-XXXX")
+    payload = _sample(-2)
+    payload.pop("grace_days")
+    lic.sync(session=FakeHTTP(FakeResponse(200, payload)))
+    lic.sync(session=FakeHTTP(boom=OSError("aloqa yo'q")))
+    assert lic.state() in ("grace", "locked")   # standart GRACE_DAYS=3
