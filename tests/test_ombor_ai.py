@@ -224,3 +224,130 @@ def test_modul_omborga_boglik(env):
     assert registry.BY_KEY["ombor_ai"].ready
     assert registry.BY_KEY["ombor_ai"].depends == ("ombor",)
     assert modules.needs_bito("ombor_ai")
+
+
+# --- firma bo'yicha zakaz (PARITY 2-band) ---
+
+
+class ZakazClient:
+    """supplier filtri + xaridlar + get-by-id soxta klienti."""
+
+    def __init__(self, supports_filter=None, purchases=None, fulls=None):
+        self.supports = supports_filter          # masalan "supplier_ids"
+        self._purchases = purchases or []        # [{_id, supplier_id, date}]
+        self._fulls = fulls or {}                # id -> full dict
+        self.paged_calls = []
+
+    def paged(self, logical, page=1, limit=200, **filters):
+        assert logical == "purchases"
+        self.paged_calls.append(dict(filters))
+        filters.pop("sort", None)
+        if filters:
+            (name, _value), = filters.items()
+            if name != self.supports:
+                # Bito noma'lum parametrni e'tiborsiz qoldiradi —
+                # FILTRSIZ ro'yxat qaytadi (aynan xavfli holat)
+                rows = self._purchases
+            else:
+                rows = [p for p in self._purchases
+                        if str(p["supplier_id"]) == "SUP-1"]
+        else:
+            rows = self._purchases
+        start = (page - 1) * limit
+        return rows[start:start + limit], len(rows)
+
+    def purchase_by_id(self, pid):
+        return self._fulls.get(pid, {})
+
+
+def _full(date, *products):
+    return {"date": date, "orders": [{"products": [
+        {"product": {"_id": pid, "name": name}, "cost": cost,
+         "amount": qty, "total_cost": cost * qty}
+        for pid, name, cost, qty in products]}]}
+
+
+def _seed_cache(env, pid, name, qty30, stock):
+    db, ctx = env["db"], env["ctx"]
+    db.run("INSERT INTO sales_stat (tenant_id, product_id, name, qty, days, "
+           "revenue) VALUES (?, ?, ?, ?, 30, 0)",
+           (ctx.current(), pid, name, qty30))
+    env["catalog"].upsert({"_id": pid, "name": name, "barcodes": [],
+                           "measure": {"short_name": "Dona"}, "sku": None,
+                           "category": {"name": "x"}, "_amount": stock})
+
+
+def test_filtr_hammasi_mos_kelsagina_qabul(env):
+    """Bito noma'lum parametrni jim o'tkazadi — 200 kelishi yetarli emas."""
+    m = env["a"]
+    purchases = [{"_id": "P1", "supplier_id": "SUP-1", "date": "2026-08-10"},
+                 {"_id": "P2", "supplier_id": "SUP-2", "date": "2026-08-09"}]
+    client = ZakazClient(supports_filter="supplier_ids",
+                         purchases=purchases)
+    build = m._detect_supplier_filter(client, "SUP-1")
+    assert build is not None
+    assert "supplier_ids" in build("SUP-1")
+    # Keshlangan — keyingi safar birinchi bo'lib shu sinaladi
+    tenant = importlib.import_module("bot.tenant")
+    assert tenant.get("zakaz_filter_param") == "supplier_ids"
+
+
+def test_filtr_ishlamasa_bruteforce(env):
+    m = env["a"]
+    purchases = [{"_id": f"P{i}", "supplier_id": ("SUP-1" if i % 2 else "X"),
+                  "date": f"2026-08-{10 + i:02d}"} for i in range(6)]
+    client = ZakazClient(supports_filter=None, purchases=purchases)
+    got = m.supplier_purchases("SUP-1", client)
+    assert [p["_id"] for p in got] == ["P1", "P3", "P5"]
+
+
+def test_collect_products_market_bot_shakli(env):
+    m = env["a"]
+    fulls = [_full("2026-08-01", ("A", "Cola", 4000, 10)),
+             _full("2026-08-10", ("A", "Cola", 4500, 5),
+                   ("B", "Fanta", 0, 4))]
+    # Fanta: cost yo'q -> total_cost/amount = 0 (total ham 0) — 0 qoladi
+    records = m.collect_products(fulls)
+    assert len(records) == 3
+    prices = m.last_prices(records)
+    assert prices["A"] == 4500          # eng yangi sana g'olib
+
+
+def test_qty_text_kasr_halol(env):
+    m = env["a"]
+    assert m.qty_text(0.496) == "0.5"
+    assert m.qty_text(2.512) == "2.51"
+    assert m.qty_text(30) == "30"
+    assert m.qty_text(1500) == "1,500"
+
+
+def test_zakaz_hisobi(env):
+    """kerak = hafta_savdosi × hafta − qoldiq; sotilmagani stale."""
+    m = env["a"]
+    _seed_cache(env, "A", "Cola", qty30=60, stock=4)     # kunlik 2, hafta 14
+    _seed_cache(env, "B", "Sekin", qty30=0, stock=7)
+    purchases = [{"_id": "P1", "supplier_id": "SUP-1", "date": "2026-08-10"}]
+    fulls = {"P1": _full("2026-08-10", ("A", "Cola", 4000, 12),
+                         ("B", "Sekin", 900, 6))}
+    client = ZakazClient(supports_filter="supplier_id",
+                         purchases=purchases, fulls=fulls)
+    result = m.zakaz_for_supplier("SUP-1", weeks=2, client=client)
+    assert len(result["order"]) == 1
+    item = result["order"][0]
+    assert item["name"] == "Cola"
+    assert item["need"] == 14 * 2 - 4                    # 24
+    assert item["cost"] == 24 * 4000
+    assert result["total"] == 96000
+    assert [s["name"] for s in result["stale"]] == ["Sekin"]
+
+
+def test_zakaz_qoldiq_yetarli_bolsa_bosh(env):
+    m = env["a"]
+    _seed_cache(env, "A", "Cola", qty30=30, stock=100)   # hafta 7, qoldiq 100
+    purchases = [{"_id": "P1", "supplier_id": "SUP-1", "date": "2026-08-10"}]
+    fulls = {"P1": _full("2026-08-10", ("A", "Cola", 4000, 12))}
+    client = ZakazClient(supports_filter="supplier_id",
+                         purchases=purchases, fulls=fulls)
+    result = m.zakaz_for_supplier("SUP-1", weeks=1, client=client)
+    assert result["order"] == []
+    assert result["stale"] == []

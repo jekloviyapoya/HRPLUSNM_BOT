@@ -52,6 +52,10 @@ PATHS = {
     "suppliers": ["supplier/get-paging", "suppliers/get-paging"],
     "purchase_create": ["purchase/create", "purchases/create"],
     "purchases": ["purchase/get-paging", "purchases/get-paging"],
+    # DIQQAT: ro'yxat mahsulotlarni QAYTARMAYDI (LESSONS §2.1) — faqat
+    # get-by-id ochadi. Ro'yxat qatorida esa supplier_id BOR.
+    "purchase_by_id": ["purchase/get-by-id"],
+    "supplier_by_id": ["supplier/get-by-id"],
     # Kassadagi pul: balans hisobotidan. Tranzaksiyalardan yig'ish xato
     # natija beradi (market-bot: 10.7M ko'rsatgan, haqiqiysi 31.2M edi)
     "balance": ["reports/balance/get", "reports/finance/balance/get",
@@ -391,6 +395,15 @@ class Bito:
                            timeout=30)
         data = unwrap(payload)
         return self._items(data) if not isinstance(data, list) else data
+
+    def purchase_by_id(self, purchase_id):
+        """Bitta xaridni to'liq ochadi — mahsulotlar faqat shu yerda."""
+        return unwrap(self.call(self.resolve("purchase_by_id")
+                                + "/" + str(purchase_id)))
+
+    def supplier_by_id(self, supplier_id):
+        return unwrap(self.call(self.resolve("supplier_by_id")
+                                + "/" + str(supplier_id)))
 
     def create_purchase(self, body, timeout=None):
         """Kirim yaratadi. Javob obyektini QAYTARADI, xato tashlamaydi.

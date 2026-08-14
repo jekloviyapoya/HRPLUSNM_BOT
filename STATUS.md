@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · Savdo (PARITY 1-band)
+> Oxirgi yangilanish: 2026-08-14 · firma zakazi (PARITY 2-band)
 >
 > **Katalogdagi 10 ta modulning hammasi yozildi.**
 >
@@ -328,7 +328,15 @@ almashtirishi so'raladi. Keyin Sozlamalar → Hisob dan istalgan payt.
 - Sozlamalar: `savdo_reja`, `savdo_bonus` (standart 0.5%),
   `bito_name:<tg_id>` — xodim↔Bito ismi
 
-**Testlar:** 424 ta, hammasi o'tadi.
+**Firma bo'yicha zakaz (ombor_ai)** — PARITY 2-band
+- Xarid ro'yxati mahsulot bermaydi — har xarid `purchase/get-by-id` bilan
+  ochiladi (parallel, 8 oqim, eng yangi 60 tasi)
+- Filtr varianti «hamma qator mos» sharti bilan tekshiriladi — 200 kelishi
+  yetarli emas, Bito noma'lum parametrni jim o'tkazadi
+- Sotuv tezligi va qoldiq keshdan — Bito'ga faqat xaridlar uchun boriladi
+- Miqdor halol ko'rsatiladi: 0.496 → «0.5», «0» emas (market-bot xatosi)
+
+**Testlar:** 430 ta, hammasi o'tadi.
 
 ---
 

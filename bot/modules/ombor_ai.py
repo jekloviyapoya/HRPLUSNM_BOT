@@ -15,7 +15,7 @@ import datetime as dt
 import logging
 
 from . import base, ombor, registry
-from .. import bito, ctx, db, tenant, ui, users
+from .. import bito, ctx, db, sessions, tenant, ui, users
 from ..errors import BitoError, BotError
 
 log = logging.getLogger(__name__)
@@ -231,6 +231,215 @@ def slow_movers(limit=20, max_days_stock=90):
     return out[:limit]
 
 
+# ------------------------------------------------- firma bo'yicha zakaz
+# market-bot tengligi (PARITY 2-band). Firma tanlanadi, muddat (hafta),
+# tavsiya: haftalik savdo × hafta − qoldiq, summa oxirgi kirim narxida.
+# Xarid ro'yxati mahsulot bermaydi — har xarid get-by-id bilan ochiladi.
+
+MAX_OPEN_PURCHASES = 60      # eng yangi shuncha xarid ochiladi
+OPEN_WORKERS = 8
+
+# Filtr parametri nomi Bito hujjatida xato yozilgan — variantlar sinaladi
+# (LESSONS §2.2). Ishlagani tenant sozlamasida keshlanadi.
+SUPPLIER_FILTER_VARIANTS = [
+    ("supliaer_id", lambda sid: {"supliaer_id": sid}),
+    ("supplier_id", lambda sid: {"supplier_id": sid}),
+    ("supplier_ids", lambda sid: {"supplier_ids": [sid]}),
+]
+
+
+def _detect_supplier_filter(client, supplier_id):
+    """Qaysi parametr haqiqatan filtrlashini aniqlaydi.
+
+    Tekshiruv: qaytgan qatorlarning HAMMASI shu supplierniki bo'lsin —
+    Bito noma'lum parametrni jimgina e'tiborsiz qoldirib, filtrsiz
+    ro'yxat qaytaradi, shuning uchun «200 keldi» yetarli emas.
+    """
+    cached = tenant.get("zakaz_filter_param")
+    variants = SUPPLIER_FILTER_VARIANTS
+    if cached:
+        variants = ([v for v in variants if v[0] == cached]
+                    + [v for v in variants if v[0] != cached])
+    for name, build in variants:
+        try:
+            rows, total = client.paged("purchases", page=1, limit=10,
+                                       **build(supplier_id))
+        except BitoError:
+            continue
+        if not rows:
+            continue
+        if all(str(r.get("supplier_id") or "") == str(supplier_id)
+               for r in rows if isinstance(r, dict)):
+            tenant.set("zakaz_filter_param", name)
+            return build
+    return None
+
+
+def supplier_purchases(supplier_id, client, max_pages=20):
+    """Firmaning xaridlari (ro'yxat qatorlari, eng yangisi birinchi)."""
+    build = _detect_supplier_filter(client, supplier_id)
+    out = []
+    if build:
+        page = 1
+        while page <= max_pages:
+            rows, total = client.paged("purchases", page=page,
+                                       sort="-date", **build(supplier_id))
+            out.extend(r for r in rows if isinstance(r, dict))
+            if not rows or page * PAGE_LIMIT >= (total or 0):
+                break
+            page += 1
+        return out
+    # Hech qaysi filtr ishlamadi — hammasini o'qib o'zimiz saralaymiz
+    page = 1
+    while page <= max_pages:
+        rows, total = client.paged("purchases", page=page, sort="-date")
+        if not rows:
+            break
+        out.extend(r for r in rows
+                   if isinstance(r, dict)
+                   and str(r.get("supplier_id") or "") == str(supplier_id))
+        if page * PAGE_LIMIT >= (total or 0):
+            break
+        page += 1
+    return out
+
+
+def collect_products(fulls):
+    """Ochilgan xaridlardan mahsulot yozuvlari.
+
+    Tuzilish (market-bot loglar orqali aniqlagan):
+    full["orders"][i]["products"][j] -> {product: {_id, name}, cost,
+    amount, total_cost}. cost bo'sh bo'lsa total_cost/amount.
+    """
+    records = []
+    for full in fulls:
+        if not isinstance(full, dict):
+            continue
+        date = str(full.get("date") or "")
+        for order in full.get("orders") or []:
+            if not isinstance(order, dict):
+                continue
+            for item in order.get("products") or []:
+                if not isinstance(item, dict):
+                    continue
+                product = item.get("product") or {}
+                pid = (product.get("_id") if isinstance(product, dict)
+                       else None) or item.get("product_id")
+                name = ((product.get("name") if isinstance(product, dict)
+                         else None) or item.get("product_name")
+                        or item.get("name"))
+                qty = _num(item.get("amount"))
+                cost = _num(item.get("cost"))
+                if not cost and qty:
+                    cost = _num(item.get("total_cost")) / qty
+                if pid and name:
+                    records.append({"pid": str(pid), "name": str(name),
+                                    "cost": cost, "qty": qty, "date": date})
+    return records
+
+
+def last_prices(records):
+    """Har mahsulot uchun ENG YANGI sanali narx."""
+    out = {}
+    for rec in sorted(records, key=lambda r: r["date"], reverse=True):
+        out.setdefault(rec["pid"], rec["cost"])
+    return out
+
+
+def qty_text(value):
+    """Miqdorni halol ko'rsatish (market-bot 2026-08-08 xatosi): kasr
+    0.496 «0» bo'lib chiqmasin — butun bo'lsa butun, kasr 2 xonagacha."""
+    value = _num(value)
+    if abs(value - round(value)) < 0.005:
+        return f"{int(round(value)):,}"
+    return f"{value:,.2f}".rstrip("0").rstrip(".")
+
+
+def zakaz_for_supplier(supplier_id, weeks, client=None):
+    """Firma bo'yicha zakaz tavsiyasi.
+
+    Qaytadi: {"order": [...], "stale": [...], "total": summa,
+    "purchases": n}. Sotuv tezligi keshdan (sales_stat), qoldiq
+    katalogdan — Bito'ga faqat xaridlar uchun boriladi.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    weeks = max(1, min(8, int(weeks or 1)))
+    client = client or bito.client()
+
+    summaries = supplier_purchases(supplier_id, client)
+    if not summaries:
+        return {"order": [], "stale": [], "total": 0.0, "purchases": 0}
+    newest = summaries[:MAX_OPEN_PURCHASES]
+    with ThreadPoolExecutor(max_workers=OPEN_WORKERS) as pool:
+        fulls = list(pool.map(
+            lambda p: _safe_open(client, p.get("_id")), newest))
+    records = collect_products(fulls)
+    prices = last_prices(records)
+    names = {}
+    bought_qty = {}
+    for rec in records:
+        names.setdefault(rec["pid"], rec["name"])
+        bought_qty[rec["pid"]] = bought_qty.get(rec["pid"], 0) + rec["qty"]
+
+    rate_rows = {row["product_id"]: row for row in stats()}
+    order, stale_rows = [], []
+    for pid, name in names.items():
+        stock = _num(db.value(
+            "SELECT amount FROM catalog WHERE tenant_id = ? "
+            "AND product_id = ?", (ctx.require(), pid), default=0))
+        row = rate_rows.get(pid)
+        weekly = daily_rate(row) * 7 if row else 0.0
+        if weekly > 0:
+            need = max(weekly * weeks - max(stock, 0), 0)
+            if need > 0:
+                order.append({"name": name, "weekly": weekly,
+                              "stock": stock, "need": need,
+                              "cost": need * _num(prices.get(pid))})
+        else:
+            stale_rows.append({"name": name, "stock": stock,
+                               "bought": bought_qty.get(pid, 0)})
+    order.sort(key=lambda x: -x["weekly"])
+    stale_rows.sort(key=lambda x: -x["bought"])
+    return {"order": order, "stale": stale_rows,
+            "total": sum(x["cost"] for x in order),
+            "purchases": len(newest)}
+
+
+def _safe_open(client, purchase_id):
+    if not purchase_id:
+        return {}
+    try:
+        return client.purchase_by_id(purchase_id) or {}
+    except BitoError:
+        log.warning("Xarid ochilmadi: %s", purchase_id)
+        return {}
+
+
+def format_zakaz(result, supplier_name, weeks, currency):
+    lines = [f"🛒 <b>Zakaz — {ui.escape(supplier_name)}</b>",
+             f"Muddat: {weeks} hafta · {result['purchases']} ta xarid "
+             "tahlil qilindi", ""]
+    if result["order"]:
+        lines.append("<b>Zakaz kerak</b> (hafta savdosi bo'yicha)")
+        for i, item in enumerate(result["order"][:25], 1):
+            lines.append(
+                f"{i}. {ui.escape(item['name'][:40])} — "
+                f"<b>{qty_text(item['need'])}</b> "
+                f"(hafta: {qty_text(item['weekly'])}, "
+                f"qoldiq: {qty_text(item['stock'])}) ≈ "
+                f"{ui.money(item['cost'], currency)}")
+        lines += ["", f"Jami ≈ <b>{ui.money(result['total'], currency)}</b>"]
+    else:
+        lines.append("Zakaz shart emas — qoldiq yetarli yoki savdo yo'q.")
+    if result["stale"]:
+        lines += ["", "⚠️ <b>Olingan, lekin sotilmayapti</b>"]
+        for item in result["stale"][:10]:
+            lines.append(f"• {ui.escape(item['name'][:40])} "
+                         f"(qoldiq: {qty_text(item['stock'])})")
+    return "\n".join(lines)
+
+
 # -------------------------------------------------------------------- modul
 
 
@@ -239,7 +448,8 @@ class OmborAI(base.Module):
     def menu(self, role):
         if role == "staff":
             return []
-        return [("🤖 Ombor tahlili", "mod:oai:panel")]
+        return [("🤖 Ombor tahlili", "mod:oai:panel"),
+                ("🛒 Zakaz", "mod:oai:firma")]
 
     def register(self, bot, guard):
         _register(bot, guard)
@@ -268,6 +478,22 @@ def _register(bot, guard):
             _slow(bot, chat_id, tg_id)
         elif action == "abc":
             _abc(bot, chat_id, tg_id)
+        elif action == "firma":
+            _firma_list(bot, chat_id, tg_id)
+        elif action == "firma_qidir":
+            sessions.set(tg_id, "oai:firma_qidiruv", {})
+            bot.send_message(chat_id, "🔍 Firma nomini yozing:")
+        elif action.startswith("fs_"):
+            supplier_id = action[3:]
+            buttons = [(f"{w} hafta", f"mod:oai:fw_{w}_{supplier_id}")
+                       for w in (1, 2, 3, 4)]
+            bot.send_message(chat_id,
+                             "📅 Zakaz qancha muddatga yetsin?",
+                             reply_markup=ui.buttons(buttons, row_width=4,
+                                                     back="mod:oai:firma"))
+        elif action.startswith("fw_"):
+            _, weeks, supplier_id = action.split("_", 2)
+            _firma_zakaz(bot, chat_id, supplier_id, int(weeks))
         elif action == "yangila":
             note = bot.send_message(chat_id, "Sotuv hisoboti olinmoqda…")
             result = scan()
@@ -280,6 +506,18 @@ def _register(bot, guard):
                 f"✅ {result['items']} ta mahsulot bo'yicha "
                 f"{result['days']} kunlik sotuv yig'ildi.")
             _panel(bot, chat_id, tg_id)
+
+
+    @bot.message_handler(
+        func=lambda m: sessions.get_global(m.from_user.id)[0]
+        == "oai:firma_qidiruv",
+        content_types=["text"])
+    @guard
+    def _search(message):
+        users.require_role(message.from_user.id, "manager")
+        sessions.clear(message.from_user.id)
+        _firma_list(bot, message.chat.id, message.from_user.id,
+                    search=(message.text or "").strip())
 
 
 def _fresh(bot, chat_id):
@@ -405,3 +643,47 @@ def _abc(bot, chat_id, tg_id):
         bot.send_message(chat_id, chunk, parse_mode="HTML")
     bot.send_message(chat_id, "—",
                      reply_markup=ui.buttons([], back="mod:oai:panel"))
+
+
+def _firma_list(bot, chat_id, tg_id, search=None):
+    try:
+        rows, total = bito.client().suppliers(page=1, search=search)
+    except BitoError as e:
+        bot.send_message(chat_id, f"Bito javob bermadi: {e}")
+        return
+    rows = [r for r in rows if isinstance(r, dict)][:30]
+    if not rows:
+        bot.send_message(chat_id, "Firma topilmadi." if search
+                         else "Bito'da firma yo'q.")
+        return
+    buttons = [((r.get("name") or "—")[:45], f"mod:oai:fs_{r.get('_id')}")
+               for r in rows]
+    buttons.append(("🔍 Qidirish", "mod:oai:firma_qidir"))
+    head = (f"🔍 «{ui.escape(search)}»: {len(rows)} ta" if search
+            else f"🏢 Firmalar ({total} ta, birinchi {len(rows)}):")
+    bot.send_message(chat_id, head, parse_mode="HTML",
+                     reply_markup=ui.buttons(buttons, row_width=1,
+                                             back="menu:root"))
+
+
+def _firma_zakaz(bot, chat_id, supplier_id, weeks):
+    if not _fresh(bot, chat_id):
+        return
+    try:
+        supplier = bito.client().supplier_by_id(supplier_id) or {}
+    except BitoError:
+        supplier = {}
+    name = supplier.get("name") or "firma"
+    note = bot.send_message(
+        chat_id, f"⏳ {ui.escape(name)} xaridlari tahlil qilinmoqda "
+                 "(30-60 soniya)…")
+    try:
+        result = zakaz_for_supplier(supplier_id, weeks)
+    finally:
+        try:
+            bot.delete_message(chat_id, note.message_id)
+        except Exception:  # noqa: BLE001
+            pass
+    currency = tenant.get("currency_name") or "so'm"
+    for chunk in ui.chunks(format_zakaz(result, name, weeks, currency)):
+        bot.send_message(chat_id, chunk, parse_mode="HTML")

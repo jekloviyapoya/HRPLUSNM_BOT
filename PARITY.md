@@ -34,8 +34,12 @@ Tartib — do'konga foyda bo'yicha. Yopilganda SHA yoziladi.
    bog'lash (30 kunlik sotuvchilardan tanlanadi, qo'lda yozilmaydi).
    Keyinga qoldi: «turib qolgan mahsulot sotuvi» kesimi, bonusni ish
    haqiga qo'shish
-2. **🛒 Zakaz** — firmaga buyurtma tuzish oqimi (tavsiyadan farqli,
-   bu haqiqiy zakaz ro'yxati). 5644-qator
+2. ~~🛒 Zakaz~~ — **yopildi** (`ombor_ai` da «🛒 Zakaz»). Firma
+   tanlanadi (qidiruv bilan) → 1–4 hafta → «hafta savdosi × hafta −
+   qoldiq», summa oxirgi kirim narxida, «olingan lekin sotilmayapti»
+   ro'yxati. Filtr parametri variantlari sinaladi, tekshiruv: qaytgan
+   qatorlar HAMMASI shu firmaniki (Bito noma'lum parametrni jim
+   o'tkazadi); ishlagani keshlanadi, bo'lmasa bruteforce
 3. **🛒 Zarur mahsulotlar** — jamoaviy «tugayapti» ro'yxati, xodim ham
    qo'shadi. 16647-qator
 4. **📋 Vazifa tarixi** + 📊 Vazifa hisoboti (kesimlar). 13579-qator
