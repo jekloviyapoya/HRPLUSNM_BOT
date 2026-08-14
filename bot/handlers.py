@@ -86,11 +86,18 @@ def register(bot):
             return
         tg_id = message.from_user.id
 
+        payload = _payload(message)
+
+        # Vakansiya havolasi — nomzod tenant foydalanuvchisi emas.
+        # Bu tekshiruv birinchi: xodim ham boshqa do'konga ariza bera oladi.
+        if payload and payload.startswith("job_"):
+            _apply_to_job(message, payload[4:])
+            return
+
         # Yangi odam
         if ctx.current() is None:
-            code = _payload(message)
-            if code:
-                _do_join(message, code)
+            if payload:
+                _do_join(message, payload)
                 return
             bot.send_message(
                 message.chat.id,
@@ -113,6 +120,109 @@ def register(bot):
             return
 
         _greet(message)
+
+    def _apply_to_job(message, raw_id):
+        """Nomzod vakansiya havolasi orqali kirdi."""
+        from .modules import hr
+
+        try:
+            job_id = int(raw_id)
+        except ValueError:
+            bot.send_message(message.chat.id, "Havola noto'g'ri.")
+            return
+        tenant_id, job = hr.find_job(job_id)
+        if not job:
+            bot.send_message(message.chat.id,
+                             "Bu vakansiya yopilgan yoki topilmadi.")
+            return
+
+        ctx.set(tenant_id)
+        if not modules.enabled("hr"):
+            bot.send_message(message.chat.id, "Vakansiya hozir faol emas.")
+            return
+
+        tg_id = message.from_user.id
+        name = (message.from_user.first_name or "").strip() or None
+        hr.start_application(job_id, tg_id, full_name=name)
+        sessions.set(tg_id, "hr:suhbat", {"job_id": job_id},
+                     tenant_id=tenant_id)
+        bot.send_message(
+            message.chat.id,
+            f"Assalomu alaykum! <b>{ui.escape(tenant.shop_name())}</b> "
+            f"«{ui.escape(job['title'])}» lavozimiga nomzodlarni "
+            "qabul qilmoqda.\n\nBir necha savol beraman — bemalol javob "
+            "bering.",
+            parse_mode="HTML")
+        _interview_step(message.chat.id, tg_id, tenant_id, job_id, None)
+
+    def _interview_step(chat_id, tg_id, tenant_id, job_id, answer,
+                        extra=None):
+        """Suhbatning bir qadami."""
+        from .modules import hr
+
+        with ctx.scope(tenant_id):
+            job = hr.get_job(job_id)
+            row = hr.applicant(job_id, tg_id)
+            if not job or not row or row["status"] != "suhbatda":
+                sessions.clear(tg_id)
+                return
+            history = hr.history_of(row)
+            if answer:
+                history.append({"role": "user", "content": answer})
+            if extra:
+                history.append({"role": "user", "content": extra})
+
+            text, done = hr.next_reply(job, history)
+            history.append({"role": "assistant", "content": text})
+            hr.save_history(job_id, tg_id, history)
+
+        bot.send_message(chat_id, text)
+
+        if done:
+            with ctx.scope(tenant_id):
+                result = hr.finish(job_id, tg_id, job)
+                targets = [u["tg_id"] for u in users.listing()
+                           if u["role"] in ("owner", "manager")]
+                card = hr.applicant(job_id, tg_id)
+                shop_job = job["title"]
+            sessions.clear(tg_id)
+            bot.send_message(
+                chat_id,
+                "Suhbat yakunlandi. Rahmat! Natija haqida xabar beramiz.")
+            _notify_hr(targets, card, shop_job, result)
+        else:
+            sessions.set(tg_id, "hr:suhbat", {"job_id": job_id,
+                                              "tenant_id": tenant_id},
+                         tenant_id=tenant_id)
+
+    def _notify_hr(targets, row, job_title, result):
+        """Rasm va matn ALOHIDA: izoh 1024 dan oshsa Telegram jim rad etadi."""
+        score = result["score"]
+        lines = [
+            f"🆕 <b>Yangi nomzod</b> — {ui.escape(job_title)}",
+            f"👤 {ui.escape(row['full_name'] or '—')}",
+        ]
+        if score is not None:
+            lines.append(f"⭐ Ball: <b>{score}/100</b>")
+        if row["distance_km"] is not None:
+            lines.append(f"📍 Masofa: {row['distance_km']:.1f} km")
+        if result["summary"]:
+            lines += ["", ui.escape(result["summary"])]
+        if result["strengths"]:
+            lines.append(f"\n✅ {ui.escape(result['strengths'])}")
+        if result["concerns"]:
+            lines.append(f"⚠️ {ui.escape(result['concerns'])}")
+        text = "\n".join(lines)
+
+        for target in targets:
+            try:
+                if row["photo_id"]:
+                    bot.send_photo(target, row["photo_id"],
+                                   caption=ui.escape(row["full_name"] or "—"))
+                bot.send_message(target, text, parse_mode="HTML")
+            except Exception:  # noqa: BLE001
+                log.warning("HR xabari yetkazilmadi: %s", target,
+                            exc_info=True)
 
     def _do_join(message, code):
         tg_id = message.from_user.id
@@ -500,6 +610,13 @@ def register(bot):
 
         if state == "lic:key":
             _save_license_key(message)
+            return
+
+        if state == "hr:suhbat":
+            data = sessions.get_global(tg_id)[1]
+            _interview_step(message.chat.id, tg_id,
+                            data.get("tenant_id") or ctx.current(),
+                            data["job_id"], message.text)
             return
 
         if ctx.current() is None:

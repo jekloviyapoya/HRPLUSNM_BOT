@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `a84a7e7` + ombor_ai
+> Oxirgi yangilanish: 2026-08-14 · commit `3e2701d` + hr
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -210,7 +210,20 @@ Bir hisobot yiqilsa qolgani ishlaydi.
   tovar «C» bo'lib chiqardi (test topdi)
 - Sotuv hisoboti keshlanadi, kuniga bir marta yangilanadi
 
-**Testlar:** 313 ta, hammasi o'tadi.
+**`hr` moduli** (migratsiya `013`)
+- Vakansiya yaratiladi, havola e'lon qilinadi: `t.me/BOT?start=job_<id>`
+- Nomzod havolani ochsa, bot u bilan **AI orqali suhbatlashadi**, keyin
+  ball va xulosa bilan menejerlarga yuboradi
+- **Nomzod `users` jadvaliga yozilmaydi** — u boshqa do'konga ham ariza
+  bera olsin, «bir odam bitta biznesda» qoidasi buzilmasin
+- Promptda: bir xabarda **faqat bitta savol** (ikkitasi birlashsa nomzod
+  faqat oxirgisiga javob beradi)
+- Suhbat oxiri `[TUGADI]` belgisi bilan aniqlanadi, belgi javobdan olinadi
+- **Rasm va matn alohida yuboriladi** — izoh 1024 belgidan oshsa Telegram
+  jimgina rad etadi
+- AI yiqilsa ariza yo'qolmaydi: ballsiz saqlanadi va sabab yoziladi
+
+**Testlar:** 334 ta, hammasi o'tadi.
 
 ---
 
@@ -220,7 +233,7 @@ Bir hisobot yiqilsa qolgani ishlaydi.
 |---|---|---|
 | `xodimlar` | ✅ | ✅ |
 | `vazifalar` | ✅ | ✅ |
-| `hr` | ✅ | ❌ |
+| `hr` | ✅ | ✅ |
 | `ombor` | ✅ | ✅ |
 | `ombor_ai` | ✅ | ✅ |
 | `nakladnoy` | ✅ | ✅ |
@@ -236,14 +249,15 @@ xodimga bitta.
 
 ## Keyingi qadam
 
-**`hr` moduli** — vakansiya, nomzod savollari, baholash.
+**`mijoz` moduli** — QR orqali baho, takliflar va shikoyatlar.
+Oxirgi modul.
 
 Nakladnoyda hali yo'q: katalogda topilmagan mahsulotni **Bito'da yangi
 yaratish** (hozircha faqat tashlab ketiladi). `PUT product/update` da
 `custom_fields` qaytarilishi shart — aks holda PLU o'chadi
 (`LESSONS-MARKET-BOT.md` §2.3).
 
-Undan keyingi tartib: `mijoz`.
+Shundan keyin katalogdagi barcha modullar yozilgan bo'ladi.
 
 **Sozlamalarda hali yo'q** (xodimlar moduli uchun kerak): ish joyi
 lokatsiyasi, radius, jadval qo'yish oynasi, stavka belgilash, ball berish.
