@@ -25,6 +25,24 @@ BY_KEY = registry.BY_KEY
 TRIAL_MODULES = list(KEYS)
 
 
+class BitoNotConnected(BotError):
+    """Modul to'langan, lekin texnik kalit yo'q.
+
+    Ikkita mustaqil shart bor va ular aralashtirilmaydi:
+      (a) BMP moduli yoqiq   — to'lov masalasi
+      (b) Bito tokeni ishlaydi — texnik masala
+    Birinchisi yo'q bo'lsa mijoz sotuvchiga murojaat qiladi, ikkinchisi
+    yo'q bo'lsa o'zi Sozlamalardan tuzatadi. Xabarlar ham shunga qarab.
+    """
+
+    def __init__(self, title=None):
+        what = f"«{title}» " if title else ""
+        super().__init__(
+            f"{what}bo'limi Bito bilan ishlaydi, lekin hisobingiz ulanmagan.\n"
+            "⚙️ Sozlamalar → Bito ulanishi bo'limidan kalitni kiriting."
+        )
+
+
 class ModuleError(BotError):
     def __init__(self, key):
         self.key = key
@@ -32,7 +50,7 @@ class ModuleError(BotError):
         title = spec.title if spec else key
         super().__init__(
             f"«{title}» moduli yoqilmagan.\n"
-            "💳 Obuna bo'limidan qo'shishni so'rashingiz mumkin."
+            "Qo'shish uchun: @ulugbekbekbergenovbmp"
         )
 
 
@@ -87,7 +105,31 @@ def require(key):
         for dep in spec.depends:
             if not enabled(dep):
                 raise ModuleError(dep)
+        # Ikkinchi qavat: to'lov emas, texnik ulanish
+        if "bito" in spec.requires and not bito_ready():
+            raise BitoNotConnected(spec.title)
     return True
+
+
+# Bito ishlashi uchun kerak bo'lgan eng kam sozlama to'plami
+BITO_KEYS = ("bito_api_key", "bito_org_id", "warehouse_id", "price_id")
+
+
+def bito_ready(tenant_id=None):
+    """Tenant Bito'ga ulanganmi? Bu — texnik shart, to'lovga aloqasi yo'q."""
+    from .. import tenant as _tenant
+
+    if tenant_id is None:
+        return not _tenant.missing(BITO_KEYS)
+    from .. import ctx as _ctx
+
+    with _ctx.scope(tenant_id):
+        return not _tenant.missing(BITO_KEYS)
+
+
+def needs_bito(key):
+    spec = BY_KEY.get(key)
+    return bool(spec and "bito" in spec.requires)
 
 
 def available(tenant_id=None):
@@ -97,9 +139,15 @@ def available(tenant_id=None):
 
 
 def catalog_status(tenant_id=None):
-    """Obuna ekrani uchun: [(spec, yoqilganmi, tayyormi), ...]"""
+    """Obuna ekrani uchun: [(spec, yoqilganmi, tayyormi, bito_kutyaptimi), ...]"""
     active = set(list_enabled(tenant_id))
-    return [(s, s.key in active, s.ready) for s in registry.CATALOG]
+    ready_bito = bito_ready(tenant_id)
+    out = []
+    for spec in registry.CATALOG:
+        on = spec.key in active
+        waiting = on and "bito" in spec.requires and not ready_bito
+        out.append((spec, on, spec.ready, waiting))
+    return out
 
 
 def menu_items(role, tenant_id=None):

@@ -371,16 +371,24 @@ def register(bot):
 
         lines.append("")
         lines.append("<b>Modullar</b>")
-        for spec, on, ready in modules.catalog_status():
-            if on and ready:
+        waiting_bito = False
+        for spec, on, ready, waits in modules.catalog_status():
+            if waits:
+                mark = "⚠️"      # to'langan, lekin Bito ulanmagan
+                waiting_bito = True
+            elif on and ready:
                 mark = "✅"
             elif on:
-                mark = "🔧"       # yoqilgan, lekin hali yozilmagan
+                mark = "🔧"      # yoqilgan, lekin hali yozilmagan
             else:
                 mark = "▫️"
             lines.append(f"{mark} {spec.title} — {ui.escape(spec.summary)}")
+        if waiting_bito:
+            lines.append("")
+            lines.append("⚠️ — modul to'langan, lekin Bito hisobi ulanmagan. "
+                         "Sozlamalardan kalitni kiriting.")
         lines.append("")
-        lines.append("Qo'shimcha modul kerak bo'lsa sotuvchiga yozing.")
+        lines.append("Qo'shimcha modul kerak bo'lsa: @ulugbekbekbergenovbmp")
 
         buttons = []
         if users.role_of(call.from_user.id) == "owner":

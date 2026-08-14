@@ -1,7 +1,7 @@
 # HRPLUSNM_BOT — joriy holat
 
 > Bu fayl har ish sessiyasi oxirida yangilanadi.
-> Oxirgi yangilanish: 2026-08-14 · commit `a9cb8ee` + xodimlar
+> Oxirgi yangilanish: 2026-08-14 · commit `7c6793e` + Bito ikki qavat
 >
 > **Yagona manba:** `jekloviyapoya/BMP_BOT/CONTRACT.md`. Unga qarshi kod
 > yozilmaydi. O'zgartirish kerak bo'lsa — BMP chatida, keyin bu yerda.
@@ -45,6 +45,16 @@
 - Natija: yo'lni to'sib cheksiz litsenziya olib bo'lmaydi; BMP yiqilsa
   to'lagan mijoz to'xtamaydi
 
+**Bito ikki qavatli mantiq**
+- Ikkita mustaqil shart aralashtirilmaydi:
+  (a) **to'lov** — BMP moduli yoqiqmi → `ModuleError`, aloqa: sotuvchi
+  (b) **texnik** — tenant Bito kalitini kiritganmi → `BitoNotConnected`,
+  aloqa: Sozlamalar
+- Modul to'langan lekin Bito ulanmagan bo'lsa: tugma **ko'rinadi**, bosilganda
+  tushunarli xabar chiqadi. Bot yiqilmaydi
+- Obuna ekranida ⚠️ belgisi: to'langan, lekin ulanish kutilyapti
+- Bito ma'lumotlari faqat tenant `settings` da, BMP'ga hech qachon yuborilmaydi
+
 **Modul litsenziyasi** (`bot/modules/`)
 - Pog'onali tarif olib tashlandi. Har modul alohida yoqiladi
 - Katalog: 10 modul (`registry.py`), `@implement` bilan sinf biriktiriladi
@@ -72,7 +82,7 @@
 - Ish haqi: oylik yoki kunbay stavka, avans/ushlab qolish/mukofot, qoldiq
 - Menejer paneli: jamoa holati bir ekranda
 
-**Testlar:** 101 ta, hammasi o'tadi.
+**Testlar:** 109 ta, hammasi o'tadi.
 
 ---
 

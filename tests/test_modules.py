@@ -90,10 +90,11 @@ def test_yozilmagan_modul_menyuda_yoq(mod):
     assert shown == ready
 
 
-def test_katalog_holati_uch_qismli(mod):
+def test_katalog_holati_tort_qismli(mod):
     modules = mod["modules"]
     modules.set_enabled(["xodimlar"])
-    status = dict((s.key, (on, ready)) for s, on, ready in modules.catalog_status())
+    status = {s.key: (on, ready, waits)
+              for s, on, ready, waits in modules.catalog_status()}
     assert status["xodimlar"][0] is True
     assert status["nakladnoy"][0] is False
     assert len(status) == len(modules.KEYS)
@@ -140,3 +141,91 @@ def test_message_maydoni_notice_orniga(mod):
     got = licsrv.notice_of({"message": "To'lov kutilmoqda"})
     assert got["text"] == "To'lov kutilmoqda"
     assert licsrv.notice_of({}) is None
+
+
+# --- Bito ikki qavatli mantiq ---
+
+def _connect_bito(mod):
+    tenant = importlib.import_module("bot.tenant")
+    for key in mod["modules"].BITO_KEYS:
+        tenant.set(key, "x")
+
+
+def test_tolangan_lekin_bito_ulanmagan(mod):
+    """(a) modul yoqiq, (b) texnik kalit yo'q -> alohida xato."""
+    modules = mod["modules"]
+    modules.set_enabled(["ombor"])
+    assert modules.enabled("ombor")
+    with pytest.raises(modules.BitoNotConnected) as exc:
+        modules.require("ombor")
+    assert "Sozlamalar" in str(exc.value)
+
+
+def test_bito_ulangach_ochiladi(mod):
+    modules = mod["modules"]
+    modules.set_enabled(["ombor"])
+    _connect_bito(mod)
+    assert modules.bito_ready()
+    modules.require("ombor")          # xato bermasligi kerak
+
+
+def test_bito_talab_qilmaydigan_modul_ulanishsiz_ishlaydi(mod):
+    """xodimlar Bito'siz ishlaydi — mijoz darrov foyda ko'radi."""
+    modules = mod["modules"]
+    modules.set_enabled(["xodimlar"])
+    assert not modules.bito_ready()
+    modules.require("xodimlar")
+
+
+def test_tolov_va_texnik_shart_aralashmaydi(mod):
+    """Modul yoqilmagan bo'lsa — Bito ulangan bo'lsa ham ModuleError."""
+    modules = mod["modules"]
+    modules.set_enabled([])
+    _connect_bito(mod)
+    with pytest.raises(modules.ModuleError):
+        modules.require("ombor")
+
+
+def test_yarim_sozlangan_bito_tayyor_emas(mod):
+    """Kalit bor, lekin ombor tanlanmagan -> hali tayyor emas."""
+    modules = mod["modules"]
+    tenant = importlib.import_module("bot.tenant")
+    tenant.set("bito_api_key", "GB-x")
+    tenant.set("bito_org_id", "o1")
+    assert not modules.bito_ready()
+    tenant.set("warehouse_id", "w1")
+    tenant.set("price_id", "p1")
+    assert modules.bito_ready()
+
+
+def test_katalogda_bito_kutayotganlar_belgilanadi(mod):
+    modules = mod["modules"]
+    modules.set_enabled(["xodimlar", "ombor", "nakladnoy"])
+    waiting = {s.key for s, on, ready, waits in modules.catalog_status() if waits}
+    assert waiting == {"ombor", "nakladnoy"}
+    assert "xodimlar" not in waiting
+    _connect_bito(mod)
+    waiting = {s.key for s, on, ready, waits in modules.catalog_status() if waits}
+    assert waiting == set()
+
+
+def test_bito_talab_qiladigan_modullar(mod):
+    """Promptdagi 4 tasi + moliya.
+
+    moliya butunlay Bito ma'lumotidan quriladi (pul taqvimi, zakaz limiti,
+    qarzlar) — ulanishsiz bo'sh ekran chiqardi.
+    marketing esa ro'yxatda YO'Q: erkin matnli post Bito'siz ham yoziladi.
+    """
+    modules = mod["modules"]
+    need = {k for k in modules.KEYS if modules.needs_bito(k)}
+    assert need == {"ombor", "ombor_ai", "nakladnoy", "inventarizatsiya",
+                    "moliya"}
+    assert not modules.needs_bito("marketing")
+
+
+def test_bito_holati_biznesga_xos(mod):
+    modules, ctx, tenants = mod["modules"], mod["ctx"], mod["tenants"]
+    _connect_bito(mod)
+    other = tenants.create(702)
+    assert modules.bito_ready(mod["tid"]) is True
+    assert modules.bito_ready(other) is False

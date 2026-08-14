@@ -84,9 +84,11 @@ CATALOG = [
         requires=("bito",),
     ),
     ModuleSpec(
+        # Bito modul darajasida talab qilinmaydi: erkin matnli post
+        # ulanishsiz ham yoziladi. Mahsulot asosidagi post ichkarida
+        # alohida tekshiriladi.
         "marketing", "📣 Marketing",
         "Aksiya posti, AI poster, kanal",
-        requires=("bito",),
     ),
     ModuleSpec(
         "mijoz", "⭐ Mijoz baholari",
